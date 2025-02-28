@@ -1,0 +1,12 @@
+{
+  "Cities": [
+    {
+      "Name": "Madrid",
+      "Url": "https://www.idealista.com/venta-viviendas/madrid-madrid/?ordenado-por=fecha-publicacion-desc"
+    },
+    {
+      "Name": "Barcelona",
+      "Url": "https://www.idealista.com/venta-viviendas/barcelona-barcelona/?ordenado-por=fecha-publicacion-desc"
+    }
+  ]
+}

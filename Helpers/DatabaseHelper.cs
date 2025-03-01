@@ -210,5 +210,55 @@ namespace Idealista.Helpers
             }
             return emails;
         }
+
+        public static List<Client> GetAllClients()
+        {
+            var clients = new List<Client>();
+            using (var connection = new SqliteConnection(ConnectionString))
+            {
+                connection.Open();
+                using (var command = new SqliteCommand("SELECT Id, Name, Email FROM Clients", connection))
+                {
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            clients.Add(new Client
+                            {
+                                Id = reader["Id"].ToString() ?? string.Empty,
+                                Name = reader["Name"].ToString() ?? string.Empty,
+                                Email = reader["Email"].ToString() ?? string.Empty
+                            });
+                        }
+                    }
+                }
+            }
+            return clients;
+        }
+
+        public static List<Subscription> GetAllSubscriptions()
+        {
+            var subscriptions = new List<Subscription>();
+            using (var connection = new SqliteConnection(ConnectionString))
+            {
+                connection.Open();
+                using (var command = new SqliteCommand("SELECT Id, ClientId, City FROM Subscriptions", connection))
+                {
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            subscriptions.Add(new Subscription
+                            {
+                                Id = reader["Id"].ToString() ?? string.Empty,
+                                ClientId = reader["ClientId"].ToString() ?? string.Empty,
+                                City = reader["City"].ToString() ?? string.Empty
+                            });
+                        }
+                    }
+                }
+            }
+            return subscriptions;
+        }
     }
 }

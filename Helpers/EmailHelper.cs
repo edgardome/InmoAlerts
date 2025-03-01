@@ -7,7 +7,7 @@ namespace Idealista.Helpers
 {
     public class EmailHelper
     {
-        public static void SendPropertyEmail(Property property)
+        public static async Task SendPropertyEmail(Property property)
         {
             try
             {
@@ -38,15 +38,15 @@ namespace Idealista.Helpers
 
                 // Crear el cuerpo del correo con la imagen
                 string htmlBody = $@"
-                <div style='text-align: center; margin-bottom: 20px;'>
-                    <img src='cid:InmoAlertLogo' alt='InmoAlert Logo' style='max-width: 200px; height: auto;'/>
-                </div>
-                <h3>{property.Title}</h3>
-                <p><strong>ID:</strong> {property.Id}</p>
-                <p><strong>Ubicación:</strong> {property.Location}</p>
-                <p><strong>Precio:</strong> {property.Price} {property.Currency}</p>
-                <p><strong>Descripción:</strong> {property.Description}</p>
-                <p><a href='{property.Url}'>Ver en Idealista</a></p>";
+                    <div style='text-align: center; margin-bottom: 20px;'>
+                        <img src='cid:InmoAlertLogo' alt='InmoAlert Logo' style='max-width: 200px; height: auto;'/>
+                    </div>
+                    <h3>{property.Title}</h3>
+                    <p><strong>ID:</strong> {property.Id}</p>
+                    <p><strong>Ubicación:</strong> {property.Location}</p>
+                    <p><strong>Precio:</strong> {property.Price} {property.Currency}</p>
+                    <p><strong>Descripción:</strong> {property.Description}</p>
+                    <p><a href='{property.Url}'>Ver en Idealista</a></p>";
 
                 // Crear vista alternativa para HTML
                 var htmlView = AlternateView.CreateAlternateViewFromString(htmlBody, null, MediaTypeNames.Text.Html);
@@ -69,7 +69,7 @@ namespace Idealista.Helpers
                 }
 
                 // Enviar el correo
-                smtpClient.Send(mailMessage);
+                await smtpClient.SendMailAsync(mailMessage);
                 Console.WriteLine($"Correo enviado para la propiedad ID: {property.Id} a {emailList.Count} destinatarios.");
             }
             catch (Exception ex)

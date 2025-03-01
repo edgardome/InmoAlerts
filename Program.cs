@@ -119,13 +119,59 @@ namespace Idealista
 
     class Program
     {
+        private static async Task ProcessCity(City city, string apiKey)
+        {
+            try
+            {
+                Console.WriteLine($"\nProcesando ciudad: {city.Name}");
+                var properties = await IdealistaScraper.ScrapeProperties(city.Url, apiKey);
+
+                Console.WriteLine($"--------------------------");
+                Console.WriteLine($"Resultados para {city.Name}:");
+                Console.WriteLine($"--------------------------");
+
+                foreach (var property in properties)
+                {
+                    if (!property.IsProfessional)
+                    {
+                        Console.WriteLine($"Property ID: {property.Id}");
+                        Console.WriteLine($"Property URL: {property.Url}");
+                        Console.WriteLine($"Title: {property.Title}");
+                        Console.WriteLine($"Location: {property.Location}");
+                        Console.WriteLine($"Price: {property.Price} {property.Currency}");
+                        Console.WriteLine($"Description: {property.Description}");
+                        Console.WriteLine($"--------------------------");
+                    }
+                }
+
+                // Esperar un tiempo entre ciudades para evitar sobrecarga
+                await Task.Delay(TimeSpan.FromMinutes(1));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error procesando {city.Name}: {ex.Message}");
+            }
+        }
+
         static async Task Main(string[] args)
         {
-            // Reemplaza con tu clave de API de Scrapfly
             string apiKey = "";
 
-            // URL a escrapear
-            string url = "https://www.idealista.com/venta-viviendas/madrid-madrid/?ordenado-por=fecha-publicacion-desc";
+            // Leer el archivo cities.json desde la carpeta Resources
+            string citiesJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cities.json");
+            if (!File.Exists(citiesJsonPath))
+            {
+                Console.WriteLine("Error: No se encuentra el archivo Resources/cities.json");
+                return;
+            }
+            string citiesJson = File.ReadAllText(citiesJsonPath);
+            var citiesConfig = JsonConvert.DeserializeObject<CitiesConfig>(citiesJson);
+
+            if (citiesConfig?.Cities == null || !citiesConfig.Cities.Any())
+            {
+                Console.WriteLine("No se encontraron ciudades para procesar en cities.json");
+                return;
+            }
 
             //Inicializamos la base de datos
             DatabaseHelper.InitializeDatabase();
@@ -139,31 +185,12 @@ namespace Idealista
                 {
                     Console.WriteLine($"Iniciando scraping: {DateTime.Now}");
 
-                    try
+                    foreach (var city in citiesConfig.Cities)
                     {
-                        var properties = await IdealistaScraper.ScrapeProperties(url, apiKey);
-
-                        Console.WriteLine("--------------------------");
-                        foreach (var property in properties)
-                        {
-                            if (!property.IsProfessional)
-                            {
-                                Console.WriteLine($"Property ID: {property.Id}");
-                                Console.WriteLine($"Property URL: {property.Url}");
-                                Console.WriteLine($"Title: {property.Title}");
-                                Console.WriteLine($"Location: {property.Location}");
-                                Console.WriteLine($"Price: {property.Price} {property.Currency}");
-                                Console.WriteLine($"Description: {property.Description}");
-                                Console.WriteLine("--------------------------");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error durante el scraping: {ex.Message}");
+                        await ProcessCity(city, apiKey);
                     }
 
-                    Console.WriteLine($"Esperando hasta la próxima ejecución...");
+                    Console.WriteLine($"Ciclo completado. Esperando hasta la próxima ejecución...");
                 }
                 while (await timer.WaitForNextTickAsync());
             }

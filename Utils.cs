@@ -111,6 +111,12 @@ namespace Idealista
             {
                 string jsonContent = File.ReadAllText(jsonPath);
                 var citiesConfig = JsonConvert.DeserializeObject<CitiesConfig>(jsonContent);
+
+                if (citiesConfig == null)
+                {
+                    throw new Exception("Error al cargar las ciudades desde el archivo de configuración.");
+                }
+
                 return citiesConfig.Cities;
             }
 

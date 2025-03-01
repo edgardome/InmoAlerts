@@ -12,7 +12,6 @@ namespace Idealista
         {
             var client = new HttpClient();
             var doc = new HtmlDocument();
-            var requestUrl = url;
             var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
 
             // Agregar los encabezados necesarios
@@ -87,10 +86,11 @@ namespace Idealista
                     await Task.Delay(new Random().Next(3000, 10001));
                     response = await client.SendAsync(requestMessage);
                     content = await Utils.DecodeGzip(response);
-                    dynamic propertyJson = JsonConvert.DeserializeObject<dynamic>(content);
 
-                    property.IsProfessional = propertyJson.data.isAdProfessional;
-                    property.Title = propertyJson.data.shortDescription != null ? propertyJson.data.shortDescription : "";
+                    dynamic? propertyJson = JsonConvert.DeserializeObject<dynamic>(content);
+
+                    property.IsProfessional = propertyJson?.data.isAdProfessional;
+                    property.Title = propertyJson?.data.shortDescription != null ? propertyJson.data.shortDescription : "";
                     property.Location = cityName;
                     property.Currency = "€";
                     string priceText = articleDoc.DocumentNode.SelectSingleNode("//span[contains(@class,'item-price')]")?.InnerText.Trim().Replace(",", "").Replace("€", "").Replace(".", "") ?? "0";

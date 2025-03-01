@@ -16,16 +16,16 @@
 
         public class Client
         {
-            public string Id { get; set; }
-            public string Name { get; set; }
-            public string Email { get; set; }
+            public required string Id { get; set; }
+            public required string Name { get; set; }
+            public required string Email { get; set; }
         }
 
         public class Subscription
         {
-            public string Id { get; set; }
-            public string ClientId { get; set; }
-            public string City { get; set; }
+            public required string Id { get; set; }
+            public required string ClientId { get; set; }
+            public required string City { get; set; }
         }
         public class City
         {

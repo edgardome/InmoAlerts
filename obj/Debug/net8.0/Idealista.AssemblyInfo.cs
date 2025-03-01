@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Idealista")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b0eabab3a58c243ee505907b69616321de350de2")]
 [assembly: System.Reflection.AssemblyProductAttribute("Idealista")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Idealista")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

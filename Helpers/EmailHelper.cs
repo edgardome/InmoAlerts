@@ -7,8 +7,6 @@ namespace Idealista.Helpers
 {
     public class EmailHelper
     {
-        private const string ConnectionString = "Data Source=properties.db;Version=3;";
-
         public static void SendPropertyEmail(Property property)
         {
             try

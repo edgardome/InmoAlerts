@@ -5,22 +5,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|c:\\users\\edgvi\\source\\repos\\idealista\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|c:\\users\\edgvi\\source\\repos\\idealista\\idealista.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
-      "RelativeMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|solutionrelative:idealista.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|c:\\users\\edgvi\\source\\repos\\idealista\\helpers\\databasehelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|solutionrelative:helpers\\databasehelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|c:\\users\\edgvi\\source\\repos\\idealista\\utils.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|solutionrelative:utils.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|c:\\users\\edgvi\\source\\repos\\idealista\\helpers\\emailhelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{7F592A52-3CF4-416F-B56A-3F49EAC5F2B5}|Idealista.csproj|solutionrelative:helpers\\emailhelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -30,60 +14,8 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 4,
+          "SelectedChildIndex": 0,
           "Children": [
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "Idealista",
-              "DocumentMoniker": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Idealista.csproj",
-              "RelativeDocumentMoniker": "Idealista.csproj",
-              "ToolTip": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Idealista.csproj",
-              "RelativeToolTip": "Idealista.csproj",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABsAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2025-02-28T15:25:27.902Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "DatabaseHelper.cs",
-              "DocumentMoniker": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Helpers\\DatabaseHelper.cs",
-              "RelativeDocumentMoniker": "Helpers\\DatabaseHelper.cs",
-              "ToolTip": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Helpers\\DatabaseHelper.cs",
-              "RelativeToolTip": "Helpers\\DatabaseHelper.cs",
-              "ViewState": "AgIAAIYAAAAAAAAAAAAiwJgAAAAPAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-02-17T23:13:15.79Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "EmailHelper.cs",
-              "DocumentMoniker": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Helpers\\EmailHelper.cs",
-              "RelativeDocumentMoniker": "Helpers\\EmailHelper.cs",
-              "ToolTip": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Helpers\\EmailHelper.cs",
-              "RelativeToolTip": "Helpers\\EmailHelper.cs",
-              "ViewState": "AgIAAC4AAAAAAAAAAAAowBkAAAAQAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-02-17T22:50:42.836Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "Utils.cs",
-              "DocumentMoniker": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Utils.cs",
-              "RelativeDocumentMoniker": "Utils.cs",
-              "ToolTip": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Utils.cs",
-              "RelativeToolTip": "Utils.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAFUAAAAOAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-02-27T20:44:28.813Z",
-              "EditorCaption": ""
-            },
             {
               "$type": "Document",
               "DocumentIndex": 0,
@@ -92,9 +24,9 @@
               "RelativeDocumentMoniker": "Program.cs",
               "ToolTip": "C:\\Users\\edgvi\\source\\repos\\Idealista\\Program.cs",
               "RelativeToolTip": "Program.cs",
-              "ViewState": "AgIAADsAAAAAAAAAAAAgwH8AAAB3AAAAAAAAAA==",
+              "ViewState": "AgIAAJQAAAAAAAAAAAAswKgAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-02-16T23:01:46.828Z",
+              "WhenOpened": "2025-02-28T23:57:49.659Z",
               "EditorCaption": ""
             }
           ]

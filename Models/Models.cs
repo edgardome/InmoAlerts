@@ -29,13 +29,13 @@
         }
         public class City
         {
-            public string Name { get; set; }
-            public string Url { get; set; }
+            public string Name { get; set; } = string.Empty;
+            public string Url { get; set; } = string.Empty;
         }
 
         public class CitiesConfig
         {
-            public List<City> Cities { get; set; }
+            public List<City> Cities { get; set; } = new();
         }
     }
 }

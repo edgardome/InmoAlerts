@@ -6,7 +6,9 @@ namespace Idealista.Helpers
 {
     public static class DatabaseHelper
     {
-        private const string ConnectionString = "Data Source=properties.db;";
+    private static readonly string ProjectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory)?.Parent?.Parent?.Parent?.FullName ?? "";
+    private static readonly string ConnectionString = $"Data Source={Path.Combine(ProjectRoot, "properties.db")};";
+
 
         public static void InitializeDatabase()
         {

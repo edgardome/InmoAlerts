@@ -1,34 +1,14 @@
-﻿using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
+﻿using Idealista.Models;
+using Microsoft.Data.Sqlite;
 using static Idealista.Models.Models;
 
 namespace Idealista.Helpers
 {
     public static class DatabaseHelper
     {
-        private static readonly IConfiguration Configuration;
-        private static readonly string ConnectionString;
+    private static readonly string ProjectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory)?.Parent?.Parent?.Parent?.FullName ?? "";
+    private static readonly string ConnectionString = $"Data Source={Path.Combine(ProjectRoot, "properties.db")};";
 
-        static DatabaseHelper()
-        {
-            try
-            {
-                // Inicializar la configuración
-                Configuration = new ConfigurationBuilder()
-                    .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
-                    .AddJsonFile("appsettings.json", optional: false)
-                    .Build();
-
-                // Obtener la cadena de conexión
-                ConnectionString = Configuration.GetConnectionString("DefaultConnection")
-                    ?? throw new InvalidOperationException("La cadena de conexión 'DefaultConnection' no está configurada en appsettings.json");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error al cargar la configuración: {ex.Message}");
-                throw;
-            }
-        }
 
         public static void InitializeDatabase()
         {

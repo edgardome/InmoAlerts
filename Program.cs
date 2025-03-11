@@ -60,25 +60,25 @@ class Program
         }
     }
 
-    private static async Task<List<Property>> ScrapeProperties(string url)
+    private static async Task<List<Property>> ScrapeProperties(City city)
     {
         try
         {
-            if (string.IsNullOrEmpty(url))
-                throw new ArgumentException("La URL no puede estar vacía", nameof(url));
+            if (string.IsNullOrEmpty(city.Url))
+                throw new ArgumentException("La URL no puede estar vacía", nameof(city.Url));
 
-            Console.WriteLine($"Iniciando scraping de: {url}");
+            Console.WriteLine($"Iniciando scraping de: {city.Url}");
             var startTime = DateTime.Now;
 
             var doc = new HtmlDocument();
-            var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
+            var requestMessage = new HttpRequestMessage(HttpMethod.Get, city.Url);
 
             // Agregar los encabezados necesarios
             Utils.SetDefaultHeaders(requestMessage);
 
             HttpResponseMessage response = await client.SendAsync(requestMessage);
             string content = await Utils.DecodeGzip(response);
-            string cityName = Regex.Match(content, @"<meta\s+name=""description""\s+content=""[^""]*en\s+([A-Za-zÀ-ÿ\s/]+),", RegexOptions.IgnoreCase).Groups[1].Value.Trim();
+            string cityName = city.Name;
 
             doc.LoadHtml(content);
             var properties = new List<Property>();
@@ -165,7 +165,7 @@ class Program
             Console.WriteLine($"\nProcesando ciudad: {city.Name}");
             _consoleLock.Release();
 
-            var properties = await ScrapeProperties(city.Url);
+            var properties = await ScrapeProperties(city);
 
             await _consoleLock.WaitAsync();
             Console.WriteLine($"--------------------------");

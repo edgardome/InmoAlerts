@@ -1,9 +1,8 @@
-﻿using Idealista.Helpers;
+﻿using Idealista.Models;
 using Newtonsoft.Json;
 using System.IO.Compression;
-using static Idealista.Models.Models;
 
-namespace Idealista
+namespace Idealista.Helpers
 {
     class Utils
     {
@@ -91,36 +90,36 @@ namespace Idealista
                 {
                     Id = Guid.NewGuid().ToString(),
                     ClientId = client.Id,
-                    City = "Alcoy / Alcoi"
+                    Location = "Alcoy / Alcoi"
                 },
                 new Subscription
                 {
                     Id = Guid.NewGuid().ToString(),
                     ClientId = client.Id,
-                    City = "Madrid"
+                    Location = "Madrid"
                 }
             };
 
             DatabaseHelper.ConfigureNewClient(client, subscriptions);
         }
 
-        public static List<City> LoadCities()
+        public static List<Location> LoadLocations()
         {
-            string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cities.json");
+            string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locations.json");
             if (File.Exists(jsonPath))
             {
                 string jsonContent = File.ReadAllText(jsonPath);
-                var citiesConfig = JsonConvert.DeserializeObject<CitiesConfig>(jsonContent);
+                var locationsConfig = JsonConvert.DeserializeObject<LocationsConfig>(jsonContent);
 
-                if (citiesConfig == null)
+                if (locationsConfig == null)
                 {
-                    throw new Exception("Error al cargar las ciudades desde el archivo de configuración.");
+                    throw new Exception("Error al cargar las localizaciones desde el archivo de configuración.");
                 }
 
-                return citiesConfig.Cities;
+                return locationsConfig.Locations;
             }
 
-            throw new FileNotFoundException("No se encontró el archivo de configuración de ciudades.");
+            throw new FileNotFoundException("No se encontró el archivo de configuración de localizaciones.");
         }
 
         public static void SetDefaultHeaders(HttpRequestMessage requestMessage)

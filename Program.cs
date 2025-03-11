@@ -1,15 +1,17 @@
 ﻿using Idealista.Helpers;
+using Idealista.Models;
+using Idealista.Services;
 using Newtonsoft.Json;
-using static Idealista.Models.Models;
-using HtmlAgilityPack;
-using System.Text.RegularExpressions;
-using Idealista;
 
 class Program
 {
-    private static readonly HttpClient client = new HttpClient(); // Declaración del HttpClient
+    private static readonly HttpClient client = new HttpClient();
     private static volatile bool _dbOperationsRunning = true;
     private static readonly SemaphoreSlim _consoleLock = new(1, 1);
+
+    private static readonly ClientService _clientService = new();
+    private static readonly SubscriptionService _subscriptionService = new();
+    private static readonly PropertyService _propertyService = new();
 
     private static async Task HandleDatabaseOperations()
     {
@@ -60,138 +62,6 @@ class Program
         }
     }
 
-    private static async Task<List<Property>> ScrapeProperties(City city)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(city.Url))
-                throw new ArgumentException("La URL no puede estar vacía", nameof(city.Url));
-
-            Console.WriteLine($"Iniciando scraping de: {city.Url}");
-            var startTime = DateTime.Now;
-
-            var doc = new HtmlDocument();
-            var requestMessage = new HttpRequestMessage(HttpMethod.Get, city.Url);
-
-            // Agregar los encabezados necesarios
-            Utils.SetDefaultHeaders(requestMessage);
-
-            HttpResponseMessage response = await client.SendAsync(requestMessage);
-            string content = await Utils.DecodeGzip(response);
-            string cityName = city.Name;
-
-            doc.LoadHtml(content);
-            var properties = new List<Property>();
-            var articles = doc.DocumentNode.SelectNodes("//article[contains(@class, 'item')]");
-
-            if (articles != null)
-            {
-                foreach (var article in articles)
-                {
-                    try
-                    {
-                        // Añadir delay entre artículos
-                        await Task.Delay(TimeSpan.FromSeconds(2));
-
-                        var property = await ProcessArticle(article, cityName);
-                        if (property != null)
-                        {
-                            properties.Add(property);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error procesando artículo: {ex.Message}");
-                    }
-                }
-            }
-
-            var duration = DateTime.Now - startTime;
-            Console.WriteLine($"Scraping completado. Duración: {duration.TotalSeconds:F2} segundos. Propiedades encontradas: {properties.Count}");
-
-            return properties;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error en ScrapeProperties: {ex.Message}");
-            throw;
-        }
-    }
-
-    private static async Task<Property?> ProcessArticle(HtmlNode article, string cityName)
-    {
-        HtmlDocument articleDoc = new HtmlDocument();
-        articleDoc.LoadHtml(article.InnerHtml);
-        var property = new Property();
-
-        property.Id = Regex.Match(article.InnerHtml, @"/inmueble/(\d+)/").Groups[1].Value;
-        property.Url = $"https://www.idealista.com/inmueble/{property.Id}/";
-
-        var url = $"https://www.idealista.com/es/ajax/listingController/adContactInfoForListing.ajax?adId={property.Id}";
-        var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
-
-        Utils.SetDefaultHeaders(requestMessage);
-
-        await Task.Delay(new Random().Next(3000, 10001));
-        var response = await client.SendAsync(requestMessage);
-        var content = await Utils.DecodeGzip(response);
-
-        dynamic? propertyJson = JsonConvert.DeserializeObject<dynamic>(content);
-
-        if (propertyJson == null) return null;
-
-        property.IsProfessional = propertyJson?.data?.isAdProfessional ?? false;
-        property.Title = propertyJson?.data?.shortDescription ?? "";
-        property.Location = cityName;
-        property.Currency = "€";
-        string priceText = articleDoc.DocumentNode.SelectSingleNode("//span[contains(@class,'item-price')]")?.InnerText.Trim().Replace(",", "").Replace("€", "").Replace(".", "") ?? "0";
-        property.Price = int.TryParse(priceText, out int price) ? price : 0;
-        property.Description = articleDoc.DocumentNode.SelectSingleNode("//div[contains(@class,'item-description')]//p")?.InnerText.Trim() ?? "";
-
-        if (!property.IsProfessional && !DatabaseHelper.PropertyExists(property.Id))
-        {
-            DatabaseHelper.InsertProperty(property);
-            await EmailHelper.SendPropertyEmail(property);
-        }
-
-        return property;
-    }
-
-    private static async Task ProcessCity(City city)
-    {
-        try
-        {
-            await _consoleLock.WaitAsync();
-            Console.WriteLine($"\nProcesando ciudad: {city.Name}");
-            _consoleLock.Release();
-
-            var properties = await ScrapeProperties(city);
-
-            await _consoleLock.WaitAsync();
-            Console.WriteLine($"--------------------------");
-            Console.WriteLine($"Resultados para {city.Name}:");
-            Console.WriteLine($"--------------------------");
-
-            foreach (var property in properties.Where(p => !p.IsProfessional))
-            {
-                Console.WriteLine($"Property ID: {property.Id}");
-                Console.WriteLine($"Property URL: {property.Url}");
-                Console.WriteLine($"Title: {property.Title}");
-                Console.WriteLine($"Location: {property.Location}");
-                Console.WriteLine($"Price: {property.Price} {property.Currency}");
-                Console.WriteLine($"Description: {property.Description}");
-                Console.WriteLine($"--------------------------");
-            }
-            _consoleLock.Release();
-        }
-        catch (Exception ex)
-        {
-            await _consoleLock.WaitAsync();
-            Console.WriteLine($"Error procesando {city.Name}: {ex.Message}");
-            _consoleLock.Release();
-        }
-    }
-
     private static async Task CreateNewClient()
     {
         try
@@ -214,7 +84,7 @@ class Program
                 Email = email
             };
 
-            await Task.Run(() => DatabaseHelper.InsertClient(client));
+            await _clientService.InsertClientAsync(client);
             Console.WriteLine($"Cliente creado con ID: {client.Id}");
         }
         catch (Exception ex)
@@ -232,11 +102,11 @@ class Program
             Console.Write("ID del cliente: ");
             string? clientId = Console.ReadLine();
             Console.Write("Ciudad para la suscripción: ");
-            string? city = Console.ReadLine();
+            string? location = Console.ReadLine();
 
-            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(city))
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(location))
             {
-                Console.WriteLine("ID del cliente y ciudad son requeridos");
+                Console.WriteLine("ID del cliente y localizacion son requeridos");
                 return;
             }
 
@@ -244,10 +114,10 @@ class Program
             {
                 Id = Guid.NewGuid().ToString(),
                 ClientId = clientId,
-                City = city
+                Location = location
             };
 
-            await Task.Run(() => DatabaseHelper.InsertSubscription(subscription));
+            await _subscriptionService.InsertSubscriptionAsync(subscription);
             Console.WriteLine($"Suscripción creada con ID: {subscription.Id}");
         }
         catch (Exception ex)
@@ -260,7 +130,7 @@ class Program
     {
         try
         {
-            var clients = await Task.Run(() => DatabaseHelper.GetAllClients());
+            var clients = await _clientService.GetAllClientsAsync();
             Console.WriteLine("\nClientes actuales:");
             Console.WriteLine("-----------------");
             foreach (var client in clients)
@@ -281,20 +151,56 @@ class Program
     {
         try
         {
-            var subscriptions = await Task.Run(() => DatabaseHelper.GetAllSubscriptions());
+            var subscriptions = await _subscriptionService.GetAllSubscriptionsAsync();
             Console.WriteLine("\nSuscripciones actuales:");
             Console.WriteLine("-----------------");
             foreach (var sub in subscriptions)
             {
                 Console.WriteLine($"ID: {sub.Id}");
                 Console.WriteLine($"Cliente ID: {sub.ClientId}");
-                Console.WriteLine($"Ciudad: {sub.City}");
+                Console.WriteLine($"Ciudad: {sub.Location}");
                 Console.WriteLine("-----------------");
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error al obtener suscripciones: {ex.Message}");
+        }
+    }
+
+    private static async Task ProcessLocation(Location location)
+    {
+        try
+        {
+            await _consoleLock.WaitAsync();
+            Console.WriteLine($"\nProcesando localizacion: {location.Name}");
+            _consoleLock.Release();
+
+            var properties = await ScraperHelper.ScrapeProperties(location);
+
+            await _consoleLock.WaitAsync();
+            Console.WriteLine($"--------------------------");
+            Console.WriteLine($"Resultados para {location.Name}:");
+            Console.WriteLine($"--------------------------");
+
+            foreach (var property in properties.Where(p => !p.IsProfessional))
+            {
+                await _propertyService.ProcessPropertyAsync(property);
+                Console.WriteLine($"Property ID: {property.Id}");
+                Console.WriteLine($"Property URL: {property.Url}");
+                Console.WriteLine($"Title: {property.Title}");
+                Console.WriteLine($"Location: {property.Location}");
+                Console.WriteLine($"Price: {property.Price} {property.Currency}");
+                Console.WriteLine($"Description: {property.Description}");
+                Console.WriteLine($"--------------------------");
+            }
+            _consoleLock.Release();
+        }
+        catch (Exception ex)
+        {
+            await _consoleLock.WaitAsync();
+            Console.WriteLine($"Error procesando {location.Name}: {ex.Message}");
+            _consoleLock.Release();
         }
     }
 
@@ -308,19 +214,19 @@ class Program
             DatabaseHelper.InitializeDatabase();
 
             // Cargar configuración
-            string citiesJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cities.json");
-            if (!File.Exists(citiesJsonPath))
+            string locationsJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
+            if (!File.Exists(locationsJsonPath))
             {
-                Console.WriteLine("Error: No se encuentra el archivo Resources/cities.json");
+                Console.WriteLine("Error: No se encuentra el archivo Resources/locations.json");
                 return;
             }
 
-            string citiesJson = File.ReadAllText(citiesJsonPath);
-            var citiesConfig = JsonConvert.DeserializeObject<CitiesConfig>(citiesJson);
+            string locationsJson = File.ReadAllText(locationsJsonPath);
+            var locationsConfig = JsonConvert.DeserializeObject<LocationsConfig>(locationsJson);
 
-            if (citiesConfig?.Cities == null || !citiesConfig.Cities.Any())
+            if (locationsConfig?.Locations == null || !locationsConfig.Locations.Any())
             {
-                Console.WriteLine("No se encontraron ciudades para procesar en cities.json");
+                Console.WriteLine("No se encontraron localizaciones para procesar en locations.json");
                 return;
             }
 
@@ -336,12 +242,12 @@ class Program
                     Console.WriteLine($"\nIniciando scraping: {DateTime.Now}");
                     _consoleLock.Release();
 
-                    // Procesar ciudades una a una
-                    foreach (var city in citiesConfig.Cities)
+                    // Procesar localizaciones una a una
+                    foreach (var location in locationsConfig.Locations)
                     {
-                        await ProcessCity(city);
+                        await ProcessLocation(location);
                         await _consoleLock.WaitAsync();
-                        Console.WriteLine($"Esperando 30 segundos antes de la siguiente ciudad...");
+                        Console.WriteLine($"Esperando 30 segundos antes de la siguiente localizacion...");
                         _consoleLock.Release();
                         await Task.Delay(TimeSpan.FromSeconds(30));
                     }
@@ -350,7 +256,6 @@ class Program
                     Console.WriteLine($"Ciclo completado. Esperando 1 hora hasta la próxima ejecución...");
                     _consoleLock.Release();
 
-                    // Esperar una hora antes del siguiente ciclo
                     await Task.Delay(TimeSpan.FromHours(1));
                 }
                 catch (Exception ex)

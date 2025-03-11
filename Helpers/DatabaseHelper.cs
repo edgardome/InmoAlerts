@@ -1,14 +1,16 @@
-﻿using Idealista.Models;
+﻿using Idealista.Configuration;
+using Idealista.Models;
 using Microsoft.Data.Sqlite;
-using static Idealista.Models.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace Idealista.Helpers
 {
     public static class DatabaseHelper
     {
-    private static readonly string ProjectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory)?.Parent?.Parent?.Parent?.FullName ?? "";
-    private static readonly string ConnectionString = $"Data Source={Path.Combine(ProjectRoot, "properties.db")};";
+        private static readonly string ProjectRoot = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory)?.Parent?.Parent?.Parent?.FullName
+            ?? throw new InvalidOperationException("No se pudo encontrar la raíz del proyecto");
 
+        private static readonly string ConnectionString = $"Data Source={Path.Combine(ProjectRoot, "properties.db")}";
 
         public static void InitializeDatabase()
         {
@@ -35,7 +37,7 @@ namespace Idealista.Helpers
             string createSubscriptionsTableQuery = @"CREATE TABLE IF NOT EXISTS Subscriptions (
                                     Id TEXT PRIMARY KEY,
                                     ClientId TEXT,
-                                    City TEXT,
+                                    Location TEXT,
                                     FOREIGN KEY(ClientId) REFERENCES Clients(Id)
                                 );";
 
@@ -105,13 +107,13 @@ namespace Idealista.Helpers
             using var connection = new SqliteConnection(ConnectionString);
             connection.Open();
 
-            string insertQuery = @"INSERT INTO Subscriptions (Id, ClientId, City) 
-                           VALUES (@Id, @ClientId, @City)";
+            string insertQuery = @"INSERT INTO Subscriptions (Id, ClientId, Location) 
+                           VALUES (@Id, @ClientId, @Location)";
 
             using var command = new SqliteCommand(insertQuery, connection);
             command.Parameters.AddWithValue("@Id", subscription.Id);
             command.Parameters.AddWithValue("@ClientId", subscription.ClientId);
-            command.Parameters.AddWithValue("@City", subscription.City);
+            command.Parameters.AddWithValue("@Location", subscription.Location);
 
             command.ExecuteNonQuery();
         }
@@ -121,7 +123,7 @@ namespace Idealista.Helpers
             using var connection = new SqliteConnection(ConnectionString);
             connection.Open();
 
-            string query = "SELECT Id, ClientId, City FROM Subscriptions WHERE ClientId = @ClientId";
+            string query = "SELECT Id, ClientId, Location FROM Subscriptions WHERE ClientId = @ClientId";
             using var command = new SqliteCommand(query, connection);
             command.Parameters.AddWithValue("@ClientId", clientId);
 
@@ -134,7 +136,7 @@ namespace Idealista.Helpers
                 {
                     Id = reader.GetString(0),
                     ClientId = reader.GetString(1),
-                    City = reader.GetString(2)
+                    Location = reader.GetString(2)
                 });
             }
 
@@ -159,14 +161,14 @@ namespace Idealista.Helpers
                 clientCommand.ExecuteNonQuery();
 
                 // Insertar suscripciones
-                string insertSubscriptionQuery = @"INSERT INTO Subscriptions (Id, ClientId, City) 
-                                           VALUES (@Id, @ClientId, @City)";
+                string insertSubscriptionQuery = @"INSERT INTO Subscriptions (Id, ClientId, Location) 
+                                           VALUES (@Id, @ClientId, @Location)";
                 foreach (var subscription in subscriptions)
                 {
                     using var subscriptionCommand = new SqliteCommand(insertSubscriptionQuery, connection, transaction);
                     subscriptionCommand.Parameters.AddWithValue("@Id", subscription.Id);
                     subscriptionCommand.Parameters.AddWithValue("@ClientId", subscription.ClientId);
-                    subscriptionCommand.Parameters.AddWithValue("@City", subscription.City);
+                    subscriptionCommand.Parameters.AddWithValue("@Location", subscription.Location);
                     subscriptionCommand.ExecuteNonQuery();
                 }
 
@@ -179,7 +181,7 @@ namespace Idealista.Helpers
             }
         }
 
-        public static List<string> GetEmailsForCity(string city)
+        public static List<string> GetEmailsForLocation(string location)
         {
             List<string> emails = new List<string>();
             try
@@ -190,10 +192,10 @@ namespace Idealista.Helpers
                     string query = @"SELECT DISTINCT Clients.Email 
                                       FROM Clients 
                                       JOIN Subscriptions ON Clients.Id = Subscriptions.ClientId 
-                                      WHERE Subscriptions.City = @City";
+                                      WHERE Subscriptions.Location = @Location";
                     using (var command = new SqliteCommand(query, connection))
                     {
-                        command.Parameters.AddWithValue("@City", city);
+                        command.Parameters.AddWithValue("@Location", location);
                         using (var reader = command.ExecuteReader())
                         {
                             while (reader.Read())
@@ -242,7 +244,7 @@ namespace Idealista.Helpers
             using (var connection = new SqliteConnection(ConnectionString))
             {
                 connection.Open();
-                using (var command = new SqliteCommand("SELECT Id, ClientId, City FROM Subscriptions", connection))
+                using (var command = new SqliteCommand("SELECT Id, ClientId, Location FROM Subscriptions", connection))
                 {
                     using (var reader = command.ExecuteReader())
                     {
@@ -252,7 +254,7 @@ namespace Idealista.Helpers
                             {
                                 Id = reader["Id"].ToString() ?? string.Empty,
                                 ClientId = reader["ClientId"].ToString() ?? string.Empty,
-                                City = reader["City"].ToString() ?? string.Empty
+                                Location = reader["Location"].ToString() ?? string.Empty
                             });
                         }
                     }

@@ -1,42 +1,53 @@
 ﻿using System.Net.Mail;
 using System.Net;
-using static Idealista.Models.Models;
 using System.Net.Mime;
+using Idealista.Configuration;
+using Idealista.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace Idealista.Helpers
 {
-    public class EmailHelper
+    public static class EmailHelper
     {
+        private static readonly EmailSettings _emailSettings;
+
+        static EmailHelper()
+        {
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+
+            _emailSettings = configuration.GetSection("EmailSettings").Get<EmailSettings>()
+                ?? throw new InvalidOperationException("Email settings not found");
+        }
+
         public static async Task SendPropertyEmail(Property property)
         {
             try
             {
-                // Obtener lista de correos desde la base de datos según la ciudad de la propiedad
-                List<string> emailList = DatabaseHelper.GetEmailsForCity(property.Location);
+                List<string> emailList = DatabaseHelper.GetEmailsForLocation(property.Location);
 
                 if (emailList.Count == 0)
                 {
-                    Console.WriteLine("No hay clientes suscritos a esta ciudad.");
+                    Console.WriteLine("No hay clientes suscritos a esta localizacion.");
                     return;
                 }
 
-                // Configuración del cliente SMTP de Gmail
-                using var smtpClient = new SmtpClient("smtp.gmail.com")
+                using var smtpClient = new SmtpClient(_emailSettings.SmtpServer)
                 {
-                    Port = 587,
-                    Credentials = new NetworkCredential("alertasinmueblesbeta@gmail.com", "efef jtmq dytl grka"),
+                    Port = _emailSettings.Port,
+                    Credentials = new NetworkCredential(_emailSettings.Username, _emailSettings.Password),
                     EnableSsl = true
                 };
 
-                // Configuración del correo
                 var mailMessage = new MailMessage
                 {
-                    From = new MailAddress("alertasinmueblesbeta@gmail.com"),
+                    From = new MailAddress(_emailSettings.FromEmail),
                     Subject = $"Nueva Propiedad Detectada: {property.Title}",
                     IsBodyHtml = true
                 };
 
-                // Crear el cuerpo del correo con la imagen
                 string htmlBody = $@"
                     <div style='text-align: center; margin-bottom: 20px;'>
                         <img src='cid:InmoAlertLogo' alt='InmoAlert Logo' style='max-width: 200px; height: auto;'/>
@@ -48,10 +59,8 @@ namespace Idealista.Helpers
                     <p><strong>Descripción:</strong> {property.Description}</p>
                     <p><a href='{property.Url}'>Ver en Idealista</a></p>";
 
-                // Crear vista alternativa para HTML
                 var htmlView = AlternateView.CreateAlternateViewFromString(htmlBody, null, MediaTypeNames.Text.Html);
 
-                // Añadir la imagen como recurso vinculado
                 var logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "inmoalert_logo.png");
                 var logo = new LinkedResource(logoPath, MediaTypeNames.Image.Jpeg)
                 {
@@ -59,16 +68,13 @@ namespace Idealista.Helpers
                 };
                 htmlView.LinkedResources.Add(logo);
 
-                // Añadir la vista alternativa al mensaje
                 mailMessage.AlternateViews.Add(htmlView);
 
-                // Añadir destinatarios desde la base de datos
                 foreach (var email in emailList)
                 {
                     mailMessage.Bcc.Add(email);
                 }
 
-                // Enviar el correo
                 await smtpClient.SendMailAsync(mailMessage);
                 Console.WriteLine($"Correo enviado para la propiedad ID: {property.Id} a {emailList.Count} destinatarios.");
             }

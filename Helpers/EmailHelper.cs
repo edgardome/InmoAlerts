@@ -30,7 +30,7 @@ namespace Idealista.Helpers
 
                 if (emailList.Count == 0)
                 {
-                    Console.WriteLine("No hay clientes suscritos a esta localizacion.");
+                    Console.WriteLine($"No hay clientes suscritos que cumplan los filtros de la propiedad {property.Id}.");
                     return;
                 }
 

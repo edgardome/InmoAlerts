@@ -41,6 +41,8 @@ namespace Idealista.Helpers
                                 Location TEXT,
                                 MaxPrice INTEGER DEFAULT 1000000,
                                 IncludeOccupied BOOLEAN DEFAULT 0,
+                                IncludeProfessional BOOLEAN DEFAULT 0,
+                                IncludeBank BOOLEAN DEFAULT 0,
                                 FOREIGN KEY(ClientId) REFERENCES Clients(Id)
                             );";
 
@@ -111,8 +113,24 @@ namespace Idealista.Helpers
             connection.Open();
 
             string insertQuery = @"
-        INSERT INTO Subscriptions (Id, ClientId, Location, MaxPrice, IncludeOccupied) 
-        VALUES (@Id, @ClientId, @Location, @MaxPrice, @IncludeOccupied)";
+                INSERT INTO Subscriptions (
+                    Id, 
+                    ClientId, 
+                    Location, 
+                    MaxPrice, 
+                    IncludeOccupied, 
+                    IncludeProfessional, 
+                    IncludeBank
+                ) 
+                VALUES (
+                    @Id, 
+                    @ClientId, 
+                    @Location, 
+                    @MaxPrice, 
+                    @IncludeOccupied, 
+                    @IncludeProfessional, 
+                    @IncludeBank
+                )";
 
             using var command = new SqliteCommand(insertQuery, connection);
             command.Parameters.AddWithValue("@Id", subscription.Id);
@@ -120,6 +138,8 @@ namespace Idealista.Helpers
             command.Parameters.AddWithValue("@Location", subscription.Location);
             command.Parameters.AddWithValue("@MaxPrice", subscription.MaxPrice);
             command.Parameters.AddWithValue("@IncludeOccupied", subscription.IncludeOccupied);
+            command.Parameters.AddWithValue("@IncludeProfessional", subscription.IncludeProfessional);
+            command.Parameters.AddWithValue("@IncludeBank", subscription.IncludeBank);
 
             command.ExecuteNonQuery();
         }
@@ -197,17 +217,26 @@ namespace Idealista.Helpers
                 using var connection = new SqliteConnection(ConnectionString);
                 connection.Open();
                 string query = @"
-            SELECT DISTINCT c.Email 
-            FROM Clients c 
-            JOIN Subscriptions s ON c.Id = s.ClientId 
-            WHERE s.Location = @Location
-            AND @Price <= s.MaxPrice
-            AND (@IsOccupied = 0 OR s.IncludeOccupied = 1)";
+                    SELECT DISTINCT c.Email 
+                    FROM Clients c 
+                    JOIN Subscriptions s ON c.Id = s.ClientId 
+                    WHERE s.Location = @Location
+                    AND @Price <= s.MaxPrice
+                    AND (@IsOccupied = 0 OR s.IncludeOccupied = 1)
+                    AND (
+                        -- Si es un banco y el usuario acepta bancos, se acepta independientemente de si es profesional
+                        (@IsBank = 1 AND s.IncludeBank = 1)
+                        OR
+                        -- Si no es un banco, se aplica la regla normal de profesionales
+                        (@IsBank = 0 AND (@IsProfessional = 0 OR s.IncludeProfessional = 1))
+                    )";
 
                 using var command = new SqliteCommand(query, connection);
                 command.Parameters.AddWithValue("@Location", property.Location);
                 command.Parameters.AddWithValue("@Price", property.Price);
                 command.Parameters.AddWithValue("@IsOccupied", isOccupied ? 1 : 0);
+                command.Parameters.AddWithValue("@IsProfessional", property.IsProfessional ? 1 : 0);
+                command.Parameters.AddWithValue("@IsBank", property.IsBank ? 1 : 0);
 
                 using var reader = command.ExecuteReader();
                 while (reader.Read())

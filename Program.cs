@@ -107,6 +107,10 @@ class Program
             string? maxPriceStr = Console.ReadLine();
             Console.Write("¿Incluir pisos ocupados? (s/N): ");
             string? includeOccupiedStr = Console.ReadLine();
+            Console.Write("¿Incluir anuncios profesionales? (s/N): ");
+            string? includeProfessionalStr = Console.ReadLine();
+            Console.Write("¿Incluir anuncios de bancos? (s/N): ");
+            string? includeBankStr = Console.ReadLine();
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(city))
             {
@@ -120,7 +124,9 @@ class Program
                 ClientId = clientId,
                 Location = city,
                 MaxPrice = string.IsNullOrWhiteSpace(maxPriceStr) ? 1000000 : int.Parse(maxPriceStr),
-                IncludeOccupied = includeOccupiedStr?.Trim().ToLower() == "s"
+                IncludeOccupied = includeOccupiedStr?.Trim().ToLower() == "s",
+                IncludeProfessional = includeProfessionalStr?.Trim().ToLower() == "s",
+                IncludeBank = includeBankStr?.Trim().ToLower() == "s"
             };
 
             await _subscriptionService.InsertSubscriptionAsync(subscription);
@@ -165,6 +171,10 @@ class Program
                 Console.WriteLine($"ID: {sub.Id}");
                 Console.WriteLine($"Cliente ID: {sub.ClientId}");
                 Console.WriteLine($"Ciudad: {sub.Location}");
+                Console.WriteLine($"Precio máximo: {sub.MaxPrice:N0}€");
+                Console.WriteLine($"Incluye ocupados: {(sub.IncludeOccupied ? "Sí" : "No")}");
+                Console.WriteLine($"Incluye profesionales: {(sub.IncludeProfessional ? "Sí" : "No")}");
+                Console.WriteLine($"Incluye bancos: {(sub.IncludeBank ? "Sí" : "No")}");
                 Console.WriteLine("-----------------");
             }
         }
@@ -189,7 +199,7 @@ class Program
             Console.WriteLine($"Resultados para {location.Name}:");
             Console.WriteLine($"--------------------------");
 
-            foreach (var property in properties.Where(p => !p.IsProfessional))
+            foreach (var property in properties) // Quitar el .Where(p => !p.IsProfessional)
             {
                 await _propertyService.ProcessPropertyAsync(property);
                 Console.WriteLine($"Property ID: {property.Id}");
@@ -213,6 +223,7 @@ class Program
     static async Task Main(string[] args)
     {
         Console.WriteLine("Iniciando el sistema...");
+        Console.WriteLine("Versión: 1.0.1.1");
 
         try
         {

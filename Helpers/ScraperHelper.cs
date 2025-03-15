@@ -105,6 +105,7 @@ namespace Idealista.Helpers
             if (propertyJson == null) return null;
 
             property.IsProfessional = propertyJson?.data?.isAdProfessional ?? false;
+            property.IsBank = propertyJson?.data?.agencyIsABank ?? false;
             property.Title = propertyJson?.data?.shortDescription ?? "";
             property.Location = location;
             property.Currency = "€";
@@ -112,7 +113,7 @@ namespace Idealista.Helpers
             property.Price = int.TryParse(priceText, out int price) ? price : 0;
             property.Description = articleDoc.DocumentNode.SelectSingleNode("//div[contains(@class,'item-description')]//p")?.InnerText.Trim() ?? "";
 
-            if (!property.IsProfessional && !DatabaseHelper.PropertyExists(property.Id))
+            if (!DatabaseHelper.PropertyExists(property.Id))
             {
                 DatabaseHelper.InsertProperty(property);
                 await EmailHelper.SendPropertyEmail(property);

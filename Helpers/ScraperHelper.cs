@@ -112,7 +112,7 @@ namespace Idealista.Helpers
             property.Price = int.TryParse(priceText, out int price) ? price : 0;
             property.Description = articleDoc.DocumentNode.SelectSingleNode("//div[contains(@class,'item-description')]//p")?.InnerText.Trim() ?? "";
 
-            if (!property.IsProfessional && !DatabaseHelper.PropertyExists(property.Id) && property.Price <= 85000)
+            if (!property.IsProfessional && !DatabaseHelper.PropertyExists(property.Id))
             {
                 DatabaseHelper.InsertProperty(property);
                 await EmailHelper.SendPropertyEmail(property);

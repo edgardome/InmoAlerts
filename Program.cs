@@ -102,11 +102,15 @@ class Program
             Console.Write("ID del cliente: ");
             string? clientId = Console.ReadLine();
             Console.Write("Ciudad para la suscripción: ");
-            string? location = Console.ReadLine();
+            string? city = Console.ReadLine();
+            Console.Write("Precio máximo (Enter para sin límite): ");
+            string? maxPriceStr = Console.ReadLine();
+            Console.Write("¿Incluir pisos ocupados? (s/N): ");
+            string? includeOccupiedStr = Console.ReadLine();
 
-            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(location))
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(city))
             {
-                Console.WriteLine("ID del cliente y localizacion son requeridos");
+                Console.WriteLine("ID del cliente y ciudad son requeridos");
                 return;
             }
 
@@ -114,7 +118,9 @@ class Program
             {
                 Id = Guid.NewGuid().ToString(),
                 ClientId = clientId,
-                Location = location
+                Location = city,
+                MaxPrice = string.IsNullOrWhiteSpace(maxPriceStr) ? 1000000 : int.Parse(maxPriceStr),
+                IncludeOccupied = includeOccupiedStr?.Trim().ToLower() == "s"
             };
 
             await _subscriptionService.InsertSubscriptionAsync(subscription);

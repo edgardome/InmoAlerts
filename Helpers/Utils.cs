@@ -1,6 +1,8 @@
 ﻿using Idealista.Models;
 using Newtonsoft.Json;
+using System.Globalization;
 using System.IO.Compression;
+using System.Text;
 
 namespace Idealista.Helpers
 {
@@ -137,13 +139,56 @@ namespace Idealista.Helpers
                 { "sec-fetch-site", "none" },
                 { "sec-fetch-user", "?1" },
                 { "upgrade-insecure-requests", "1" },
-                { "user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36" }
+                { "user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36" }
             };
 
             foreach (var header in DefaultHeaders)
             {
                 requestMessage.Headers.Add(header.Key, header.Value);
             }
+        }
+
+        public static bool IsPropertyOccupied(string description)
+        {
+            string[] occupiedKeywords = new[]
+            {
+                "ocupado",
+                "ocupada",
+                "ocupacional",
+                "sin posesion",
+                "inquilinos",
+                "alquilado",
+                "alquilada",
+                "rentado",
+                "rentada",
+                "con inquilino",
+                "con inquilinos",
+                "con renta",
+                "arrendado",
+                "arrendada"
+            };
+
+            string normalizedDescription = RemoveDiacritics(description.ToLowerInvariant());
+
+            return occupiedKeywords.Any(keyword =>
+                normalizedDescription.Contains(RemoveDiacritics(keyword.ToLowerInvariant())));
+        }
+
+        private static string RemoveDiacritics(string text)
+        {
+            var normalizedString = text.Normalize(NormalizationForm.FormD);
+            var stringBuilder = new StringBuilder();
+
+            foreach (var c in normalizedString)
+            {
+                var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(c);
+                if (unicodeCategory != UnicodeCategory.NonSpacingMark)
+                {
+                    stringBuilder.Append(c);
+                }
+            }
+
+            return stringBuilder.ToString().Normalize(NormalizationForm.FormC);
         }
     }
 }

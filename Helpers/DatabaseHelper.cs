@@ -19,27 +19,30 @@ namespace Idealista.Helpers
             connection.Open();
 
             string createPropertiesTableQuery = @"CREATE TABLE IF NOT EXISTS Properties (
-                                    Id TEXT PRIMARY KEY,
-                                    Url TEXT,
-                                    Title TEXT,
-                                    Location TEXT,
-                                    Price INTEGER,
-                                    Currency TEXT,
-                                    Description TEXT
-                                );";
+                                Id TEXT PRIMARY KEY,
+                                Url TEXT,
+                                Title TEXT,
+                                Location TEXT,
+                                Price INTEGER,
+                                Currency TEXT,
+                                Description TEXT,
+                                IsOccupied BOOLEAN DEFAULT 0
+                            );";
 
             string createClientsTableQuery = @"CREATE TABLE IF NOT EXISTS Clients (
-                                    Id TEXT PRIMARY KEY,
-                                    Name TEXT,
-                                    Email TEXT
-                                );";
+                                Id TEXT PRIMARY KEY,
+                                Name TEXT,
+                                Email TEXT
+                            );";
 
             string createSubscriptionsTableQuery = @"CREATE TABLE IF NOT EXISTS Subscriptions (
-                                    Id TEXT PRIMARY KEY,
-                                    ClientId TEXT,
-                                    Location TEXT,
-                                    FOREIGN KEY(ClientId) REFERENCES Clients(Id)
-                                );";
+                                Id TEXT PRIMARY KEY,
+                                ClientId TEXT,
+                                Location TEXT,
+                                MaxPrice INTEGER DEFAULT 1000000,
+                                IncludeOccupied BOOLEAN DEFAULT 0,
+                                FOREIGN KEY(ClientId) REFERENCES Clients(Id)
+                            );";
 
             using var command = new SqliteCommand(createPropertiesTableQuery, connection);
             command.ExecuteNonQuery();
@@ -107,13 +110,16 @@ namespace Idealista.Helpers
             using var connection = new SqliteConnection(ConnectionString);
             connection.Open();
 
-            string insertQuery = @"INSERT INTO Subscriptions (Id, ClientId, Location) 
-                           VALUES (@Id, @ClientId, @Location)";
+            string insertQuery = @"
+        INSERT INTO Subscriptions (Id, ClientId, Location, MaxPrice, IncludeOccupied) 
+        VALUES (@Id, @ClientId, @Location, @MaxPrice, @IncludeOccupied)";
 
             using var command = new SqliteCommand(insertQuery, connection);
             command.Parameters.AddWithValue("@Id", subscription.Id);
             command.Parameters.AddWithValue("@ClientId", subscription.ClientId);
             command.Parameters.AddWithValue("@Location", subscription.Location);
+            command.Parameters.AddWithValue("@MaxPrice", subscription.MaxPrice);
+            command.Parameters.AddWithValue("@IncludeOccupied", subscription.IncludeOccupied);
 
             command.ExecuteNonQuery();
         }
@@ -181,29 +187,32 @@ namespace Idealista.Helpers
             }
         }
 
-        public static List<string> GetEmailsForLocation(string location)
+        public static List<string> GetEmailsForLocation(Property property)
         {
             List<string> emails = new List<string>();
             try
             {
-                using (var connection = new SqliteConnection(ConnectionString))
+                bool isOccupied = Utils.IsPropertyOccupied(property.Description);
+
+                using var connection = new SqliteConnection(ConnectionString);
+                connection.Open();
+                string query = @"
+            SELECT DISTINCT c.Email 
+            FROM Clients c 
+            JOIN Subscriptions s ON c.Id = s.ClientId 
+            WHERE s.Location = @Location
+            AND @Price <= s.MaxPrice
+            AND (@IsOccupied = 0 OR s.IncludeOccupied = 1)";
+
+                using var command = new SqliteCommand(query, connection);
+                command.Parameters.AddWithValue("@Location", property.Location);
+                command.Parameters.AddWithValue("@Price", property.Price);
+                command.Parameters.AddWithValue("@IsOccupied", isOccupied ? 1 : 0);
+
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
                 {
-                    connection.Open();
-                    string query = @"SELECT DISTINCT Clients.Email 
-                                      FROM Clients 
-                                      JOIN Subscriptions ON Clients.Id = Subscriptions.ClientId 
-                                      WHERE Subscriptions.Location = @Location";
-                    using (var command = new SqliteCommand(query, connection))
-                    {
-                        command.Parameters.AddWithValue("@Location", location);
-                        using (var reader = command.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                emails.Add(reader.GetString(0));
-                            }
-                        }
-                    }
+                    emails.Add(reader.GetString(0));
                 }
             }
             catch (Exception ex)

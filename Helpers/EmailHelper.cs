@@ -26,7 +26,7 @@ namespace Idealista.Helpers
         {
             try
             {
-                List<string> emailList = DatabaseHelper.GetEmailsForLocation(property.Location);
+                List<string> emailList = DatabaseHelper.GetEmailsForLocation(property);
 
                 if (emailList.Count == 0)
                 {

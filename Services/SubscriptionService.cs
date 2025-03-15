@@ -20,9 +20,9 @@ namespace Idealista.Services
             return await Task.Run(() => DatabaseHelper.GetSubscriptionsByClientId(clientId));
         }
 
-        public async Task<List<string>> GetEmailsForLocationAsync(string location)
+        public async Task<List<string>> GetEmailsForLocationAsync(Property property)
         {
-            return await Task.Run(() => DatabaseHelper.GetEmailsForLocation(location));
+            return await Task.Run(() => DatabaseHelper.GetEmailsForLocation(property));
         }
     }
 }

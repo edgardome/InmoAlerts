@@ -149,7 +149,10 @@ namespace Idealista.Helpers
             using var connection = new SqliteConnection(ConnectionString);
             connection.Open();
 
-            string query = "SELECT Id, ClientId, Location FROM Subscriptions WHERE ClientId = @ClientId";
+            string query = @"
+                SELECT Id, ClientId, Location, MaxPrice, IncludeOccupied, IncludeProfessional, IncludeBank 
+                FROM Subscriptions 
+                WHERE ClientId = @ClientId";
             using var command = new SqliteCommand(query, connection);
             command.Parameters.AddWithValue("@ClientId", clientId);
 
@@ -162,7 +165,11 @@ namespace Idealista.Helpers
                 {
                     Id = reader.GetString(0),
                     ClientId = reader.GetString(1),
-                    Location = reader.GetString(2)
+                    Location = reader.GetString(2),
+                    MaxPrice = reader.GetInt32(3),
+                    IncludeOccupied = reader.GetBoolean(4),
+                    IncludeProfessional = reader.GetBoolean(5),
+                    IncludeBank = reader.GetBoolean(6)
                 });
             }
 
@@ -179,7 +186,7 @@ namespace Idealista.Helpers
             {
                 // Insertar cliente
                 string insertClientQuery = @"INSERT INTO Clients (Id, Name, Email) 
-                                     VALUES (@Id, @Name, @Email)";
+                             VALUES (@Id, @Name, @Email)";
                 using var clientCommand = new SqliteCommand(insertClientQuery, connection, transaction);
                 clientCommand.Parameters.AddWithValue("@Id", client.Id);
                 clientCommand.Parameters.AddWithValue("@Name", client.Name);
@@ -187,14 +194,22 @@ namespace Idealista.Helpers
                 clientCommand.ExecuteNonQuery();
 
                 // Insertar suscripciones
-                string insertSubscriptionQuery = @"INSERT INTO Subscriptions (Id, ClientId, Location) 
-                                           VALUES (@Id, @ClientId, @Location)";
+                string insertSubscriptionQuery = @"
+                    INSERT INTO Subscriptions (
+                        Id, ClientId, Location, MaxPrice, IncludeOccupied, IncludeProfessional, IncludeBank
+                    ) VALUES (
+                        @Id, @ClientId, @Location, @MaxPrice, @IncludeOccupied, @IncludeProfessional, @IncludeBank
+                    )";
                 foreach (var subscription in subscriptions)
                 {
                     using var subscriptionCommand = new SqliteCommand(insertSubscriptionQuery, connection, transaction);
                     subscriptionCommand.Parameters.AddWithValue("@Id", subscription.Id);
                     subscriptionCommand.Parameters.AddWithValue("@ClientId", subscription.ClientId);
                     subscriptionCommand.Parameters.AddWithValue("@Location", subscription.Location);
+                    subscriptionCommand.Parameters.AddWithValue("@MaxPrice", subscription.MaxPrice);
+                    subscriptionCommand.Parameters.AddWithValue("@IncludeOccupied", subscription.IncludeOccupied);
+                    subscriptionCommand.Parameters.AddWithValue("@IncludeProfessional", subscription.IncludeProfessional);
+                    subscriptionCommand.Parameters.AddWithValue("@IncludeBank", subscription.IncludeBank);
                     subscriptionCommand.ExecuteNonQuery();
                 }
 
@@ -282,7 +297,9 @@ namespace Idealista.Helpers
             using (var connection = new SqliteConnection(ConnectionString))
             {
                 connection.Open();
-                using (var command = new SqliteCommand("SELECT Id, ClientId, Location FROM Subscriptions", connection))
+                using (var command = new SqliteCommand(@"
+            SELECT Id, ClientId, Location, MaxPrice, IncludeOccupied, IncludeProfessional, IncludeBank 
+            FROM Subscriptions", connection))
                 {
                     using (var reader = command.ExecuteReader())
                     {
@@ -292,7 +309,11 @@ namespace Idealista.Helpers
                             {
                                 Id = reader["Id"].ToString() ?? string.Empty,
                                 ClientId = reader["ClientId"].ToString() ?? string.Empty,
-                                Location = reader["Location"].ToString() ?? string.Empty
+                                Location = reader["Location"].ToString() ?? string.Empty,
+                                MaxPrice = Convert.ToInt32(reader["MaxPrice"]),
+                                IncludeOccupied = Convert.ToBoolean(reader["IncludeOccupied"]),
+                                IncludeProfessional = Convert.ToBoolean(reader["IncludeProfessional"]),
+                                IncludeBank = Convert.ToBoolean(reader["IncludeBank"])
                             });
                         }
                     }

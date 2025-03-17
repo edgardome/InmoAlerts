@@ -70,6 +70,10 @@ class Program
             string? name = Console.ReadLine();
             Console.Write("Email del cliente: ");
             string? email = Console.ReadLine();
+            Console.Write("¿Activar suscripción ahora? (s/N): ");
+            string? activateNow = Console.ReadLine();
+            Console.Write("Días de suscripción (Enter para 30 días): ");
+            string? daysStr = Console.ReadLine();
 
             if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(email))
             {
@@ -77,15 +81,29 @@ class Program
                 return;
             }
 
+            bool hasActivePayment = activateNow?.Trim().ToLower() == "s";
+            int subscriptionDays = string.IsNullOrWhiteSpace(daysStr) ? 30 : int.Parse(daysStr);
+
             var client = new Client
             {
                 Id = Guid.NewGuid().ToString(),
                 Name = name,
-                Email = email
+                Email = email,
+                HasActivePayment = hasActivePayment,
+                SubscriptionEndDate = hasActivePayment ? DateTime.Now.AddDays(subscriptionDays) : null
             };
 
             await _clientService.InsertClientAsync(client);
             Console.WriteLine($"Cliente creado con ID: {client.Id}");
+
+            if (hasActivePayment)
+            {
+                Console.WriteLine($"Suscripción activada hasta: {client.SubscriptionEndDate:dd/MM/yyyy HH:mm}");
+            }
+            else
+            {
+                Console.WriteLine("Cliente creado sin suscripción activa");
+            }
         }
         catch (Exception ex)
         {
@@ -150,6 +168,11 @@ class Program
                 Console.WriteLine($"ID: {client.Id}");
                 Console.WriteLine($"Nombre: {client.Name}");
                 Console.WriteLine($"Email: {client.Email}");
+                Console.WriteLine($"Suscripción activa: {(client.HasActivePayment ? "Sí" : "No")}");
+                if (client.SubscriptionEndDate.HasValue)
+                {
+                    Console.WriteLine($"Fecha fin suscripción: {client.SubscriptionEndDate:dd/MM/yyyy HH:mm}");
+                }
                 Console.WriteLine("-----------------");
             }
         }
@@ -181,6 +204,42 @@ class Program
         catch (Exception ex)
         {
             Console.WriteLine($"Error al obtener suscripciones: {ex.Message}");
+        }
+    }
+
+    private static async Task RunSubscriptionVerification(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _consoleLock.WaitAsync();
+                Console.WriteLine($"\nVerificando estados de suscripción: {DateTime.Now}");
+                _consoleLock.Release();
+
+                var clients = await _clientService.GetAllClientsAsync();
+                foreach (var client in clients)
+                {
+                    DatabaseHelper.UpdateSubscriptionStatus(client.Id);
+                }
+
+                // Verificar cada 24 horas
+                await Task.Delay(TimeSpan.FromHours(24), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                await _consoleLock.WaitAsync();
+                Console.WriteLine($"Error en verificación de suscripciones: {ex.Message}");
+                Console.WriteLine("Reintentando en 1 hora...");
+                _consoleLock.Release();
+
+                // En caso de error, esperar 1 hora antes de reintentar
+                await Task.Delay(TimeSpan.FromHours(1), cancellationToken);
+            }
         }
     }
 
@@ -220,6 +279,48 @@ class Program
         }
     }
 
+    private static async Task RunScrapingLoop(List<Location> locations, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _consoleLock.WaitAsync();
+                Console.WriteLine($"\nIniciando scraping: {DateTime.Now}");
+                _consoleLock.Release();
+
+                foreach (var location in locations)
+                {
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    await ProcessLocation(location);
+                    await _consoleLock.WaitAsync();
+                    Console.WriteLine($"Esperando 30 segundos antes de la siguiente localización...");
+                    _consoleLock.Release();
+                    await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+                }
+
+                await _consoleLock.WaitAsync();
+                Console.WriteLine($"Ciclo completado. Esperando 1 hora hasta la próxima ejecución...");
+                _consoleLock.Release();
+
+                await Task.Delay(TimeSpan.FromHours(1), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                await _consoleLock.WaitAsync();
+                Console.WriteLine($"Error durante el ciclo de scraping: {ex.Message}");
+                Console.WriteLine("Reintentando en 1 minuto...");
+                _consoleLock.Release();
+                await Task.Delay(TimeSpan.FromMinutes(1), cancellationToken);
+            }
+        }
+    }
+
     static async Task Main(string[] args)
     {
         Console.WriteLine("Iniciando el sistema...");
@@ -227,6 +328,14 @@ class Program
 
         try
         {
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (s, e) =>
+            {
+                Console.WriteLine("Deteniendo el sistema...");
+                cts.Cancel();
+                e.Cancel = true;
+            };
+
             // Inicializar base de datos
             DatabaseHelper.InitializeDatabase();
 
@@ -247,43 +356,20 @@ class Program
                 return;
             }
 
-            // Iniciar operaciones de base de datos en segundo plano
-            var dbOperationsTask = HandleDatabaseOperations();
-
-            // Bucle infinito para el scraping
-            while (true)
+            // Iniciar las tres tareas principales
+            var tasks = new List<Task>
             {
-                try
-                {
-                    await _consoleLock.WaitAsync();
-                    Console.WriteLine($"\nIniciando scraping: {DateTime.Now}");
-                    _consoleLock.Release();
+            HandleDatabaseOperations(),
+            RunSubscriptionVerification(cts.Token),
+            RunScrapingLoop(locationsConfig.Locations, cts.Token)
+            };
 
-                    // Procesar localizaciones una a una
-                    foreach (var location in locationsConfig.Locations)
-                    {
-                        await ProcessLocation(location);
-                        await _consoleLock.WaitAsync();
-                        Console.WriteLine($"Esperando 30 segundos antes de la siguiente localizacion...");
-                        _consoleLock.Release();
-                        await Task.Delay(TimeSpan.FromSeconds(30));
-                    }
+            // Esperar a que cualquiera de las tareas falle o se complete
+            await Task.WhenAny(tasks);
 
-                    await _consoleLock.WaitAsync();
-                    Console.WriteLine($"Ciclo completado. Esperando 1 hora hasta la próxima ejecución...");
-                    _consoleLock.Release();
-
-                    await Task.Delay(TimeSpan.FromHours(1));
-                }
-                catch (Exception ex)
-                {
-                    await _consoleLock.WaitAsync();
-                    Console.WriteLine($"Error durante el ciclo de scraping: {ex.Message}");
-                    Console.WriteLine("Reintentando en 1 minuto...");
-                    _consoleLock.Release();
-                    await Task.Delay(TimeSpan.FromMinutes(1));
-                }
-            }
+            // Si llegamos aquí, alguna tarea terminó inesperadamente
+            cts.Cancel(); // Cancelar las demás tareas
+            await Task.WhenAll(tasks); // Esperar a que todas terminen
         }
         catch (Exception ex)
         {

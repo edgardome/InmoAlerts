@@ -44,7 +44,7 @@ namespace Idealista.Helpers
                 var mailMessage = new MailMessage
                 {
                     From = new MailAddress(_emailSettings.FromEmail),
-                    Subject = $"Nueva Propiedad Detectada: {property.Title}",
+                    Subject = $"Nuevo inmueble detectado: {property.Title}",
                     IsBodyHtml = true
                 };
 
@@ -56,6 +56,7 @@ namespace Idealista.Helpers
                     <p><strong>ID:</strong> {property.Id}</p>
                     <p><strong>Ubicación:</strong> {property.Location}</p>
                     <p><strong>Precio:</strong> {property.Price} {property.Currency}</p>
+                    <p><strong>Tipo de vendedor:</strong> {Utils.GetVendorType(property)}</p>
                     <p><strong>Descripción:</strong> {property.Description}</p>
                     <p><a href='{property.Url}'>Ver en Idealista</a></p>";
 

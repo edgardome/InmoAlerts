@@ -12,8 +12,9 @@ namespace Idealista.Models
         public required string ClientId { get; set; }
         public required string Location { get; set; }
         public int MaxPrice { get; set; } = 999999999;
-        public bool IncludeOccupied { get; set; } = true;
-        public bool IncludeProfessional { get; set; } = true;
-        public bool IncludeBank { get; set; } = true;
+        public bool IncludePrivate { get; set; } = false;
+        public bool IncludeOccupied { get; set; } = false;
+        public bool IncludeProfessional { get; set; } = false;
+        public bool IncludeBank { get; set; } = false;
     }
 }

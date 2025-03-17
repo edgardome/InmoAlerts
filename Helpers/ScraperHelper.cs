@@ -5,6 +5,7 @@ using HtmlAgilityPack;
 using Microsoft.Extensions.Configuration;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Idealista.Helpers
 {
@@ -100,13 +101,15 @@ namespace Idealista.Helpers
             var response = await client.SendAsync(requestMessage);
             var content = await Utils.DecodeGzip(response);
 
-            dynamic? propertyJson = JsonConvert.DeserializeObject<dynamic>(content);
-
+            var propertyJson = JsonConvert.DeserializeObject<JObject>(content);
             if (propertyJson == null) return null;
 
-            property.IsProfessional = propertyJson?.data?.isAdProfessional ?? false;
-            property.IsBank = propertyJson?.data?.agencyIsABank ?? false;
-            property.Title = propertyJson?.data?.shortDescription ?? "";
+            var data = propertyJson["data"] as JObject;
+            if (data == null) return null;
+
+            property.IsProfessional = data["isAdProfessional"]?.ToObject<bool?>() ?? false;
+            property.IsBank = data["agencyIsABank"]?.ToObject<bool?>() ?? false;
+            property.Title = data["shortDescription"]?.ToString() ?? "";
             property.Location = location;
             property.Currency = "€";
             string priceText = articleDoc.DocumentNode.SelectSingleNode("//span[contains(@class,'item-price')]")?.InnerText.Trim().Replace(",", "").Replace("€", "").Replace(".", "") ?? "0";

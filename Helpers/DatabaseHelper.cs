@@ -19,32 +19,37 @@ namespace Idealista.Helpers
             connection.Open();
 
             string createPropertiesTableQuery = @"CREATE TABLE IF NOT EXISTS Properties (
-                                Id TEXT PRIMARY KEY,
-                                Url TEXT,
-                                Title TEXT,
-                                Location TEXT,
-                                Price INTEGER,
-                                Currency TEXT,
-                                Description TEXT,
-                                IsOccupied BOOLEAN DEFAULT 0
-                            );";
+                    Id TEXT PRIMARY KEY,
+                    Url TEXT,
+                    Title TEXT,
+                    Location TEXT,
+                    Price INTEGER,
+                    Currency TEXT,
+                    Description TEXT,
+                    IsOccupied BOOLEAN DEFAULT 0
+                );";
 
-            string createClientsTableQuery = @"CREATE TABLE IF NOT EXISTS Clients (
-                                Id TEXT PRIMARY KEY,
-                                Name TEXT,
-                                Email TEXT
-                            );";
+            string createClientsTableQuery = @"
+                CREATE TABLE IF NOT EXISTS Clients (
+                    Id TEXT PRIMARY KEY,
+                    Name TEXT,
+                    Email TEXT,
+                    HasActivePayment BOOLEAN DEFAULT 0,
+                    SubscriptionEndDate TEXT
+                );";
 
-            string createSubscriptionsTableQuery = @"CREATE TABLE IF NOT EXISTS Subscriptions (
-                                Id TEXT PRIMARY KEY,
-                                ClientId TEXT,
-                                Location TEXT,
-                                MaxPrice INTEGER DEFAULT 1000000,
-                                IncludeOccupied BOOLEAN DEFAULT 0,
-                                IncludeProfessional BOOLEAN DEFAULT 0,
-                                IncludeBank BOOLEAN DEFAULT 0,
-                                FOREIGN KEY(ClientId) REFERENCES Clients(Id)
-                            );";
+            string createSubscriptionsTableQuery = @"
+                CREATE TABLE IF NOT EXISTS Subscriptions (
+                    Id TEXT PRIMARY KEY,
+                    ClientId TEXT,
+                    Location TEXT,
+                    MaxPrice INTEGER DEFAULT 1000000,
+                    IncludeOccupied BOOLEAN DEFAULT 0,
+                    IncludeProfessional BOOLEAN DEFAULT 0,
+                    IncludeBank BOOLEAN DEFAULT 0,
+                    IncludePrivate BOOLEAN DEFAULT 0,
+                    FOREIGN KEY(ClientId) REFERENCES Clients(Id)
+                );";
 
             using var command = new SqliteCommand(createPropertiesTableQuery, connection);
             command.ExecuteNonQuery();
@@ -96,13 +101,20 @@ namespace Idealista.Helpers
             using var connection = new SqliteConnection(ConnectionString);
             connection.Open();
 
-            string insertQuery = @"INSERT INTO Clients (Id, Name, Email) 
-                           VALUES (@Id, @Name, @Email)";
+            string insertQuery = @"
+                INSERT INTO Clients (
+                    Id, Name, Email, HasActivePayment, SubscriptionEndDate
+                ) VALUES (
+                    @Id, @Name, @Email, @HasActivePayment, @SubscriptionEndDate
+                )";
 
             using var command = new SqliteCommand(insertQuery, connection);
             command.Parameters.AddWithValue("@Id", client.Id);
             command.Parameters.AddWithValue("@Name", client.Name);
             command.Parameters.AddWithValue("@Email", client.Email);
+            command.Parameters.AddWithValue("@HasActivePayment", client.HasActivePayment);
+            command.Parameters.AddWithValue("@SubscriptionEndDate",
+                (object?)client.SubscriptionEndDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? DBNull.Value);
 
             command.ExecuteNonQuery();
         }
@@ -120,7 +132,8 @@ namespace Idealista.Helpers
                     MaxPrice, 
                     IncludeOccupied, 
                     IncludeProfessional, 
-                    IncludeBank
+                    IncludeBank,
+                    IncludePrivate
                 ) 
                 VALUES (
                     @Id, 
@@ -129,7 +142,8 @@ namespace Idealista.Helpers
                     @MaxPrice, 
                     @IncludeOccupied, 
                     @IncludeProfessional, 
-                    @IncludeBank
+                    @IncludeBank,
+                    @IncludePrivate
                 )";
 
             using var command = new SqliteCommand(insertQuery, connection);
@@ -140,6 +154,7 @@ namespace Idealista.Helpers
             command.Parameters.AddWithValue("@IncludeOccupied", subscription.IncludeOccupied);
             command.Parameters.AddWithValue("@IncludeProfessional", subscription.IncludeProfessional);
             command.Parameters.AddWithValue("@IncludeBank", subscription.IncludeBank);
+            command.Parameters.AddWithValue("@IncludePrivate", subscription.IncludePrivate);
 
             command.ExecuteNonQuery();
         }
@@ -237,12 +252,11 @@ namespace Idealista.Helpers
                     JOIN Subscriptions s ON c.Id = s.ClientId 
                     WHERE s.Location = @Location
                     AND @Price <= s.MaxPrice
+                    AND c.HasActivePayment = 1  -- Verificar estado de pago
                     AND (@IsOccupied = 0 OR s.IncludeOccupied = 1)
                     AND (
-                        -- Si es un banco y el usuario acepta bancos, se acepta independientemente de si es profesional
                         (@IsBank = 1 AND s.IncludeBank = 1)
                         OR
-                        -- Si no es un banco, se aplica la regla normal de profesionales
                         (@IsBank = 0 AND (@IsProfessional = 0 OR s.IncludeProfessional = 1))
                     )";
 
@@ -272,17 +286,26 @@ namespace Idealista.Helpers
             using (var connection = new SqliteConnection(ConnectionString))
             {
                 connection.Open();
-                using (var command = new SqliteCommand("SELECT Id, Name, Email FROM Clients", connection))
+                using (var command = new SqliteCommand(@"
+                    SELECT Id, Name, Email, HasActivePayment, SubscriptionEndDate 
+                    FROM Clients", connection))
                 {
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
                         {
+                            var subscriptionEndDateStr = reader["SubscriptionEndDate"].ToString();
+                            DateTime? subscriptionEndDate = !string.IsNullOrEmpty(subscriptionEndDateStr)
+                                ? DateTime.Parse(subscriptionEndDateStr)
+                                : null;
+
                             clients.Add(new Client
                             {
                                 Id = reader["Id"].ToString() ?? string.Empty,
                                 Name = reader["Name"].ToString() ?? string.Empty,
-                                Email = reader["Email"].ToString() ?? string.Empty
+                                Email = reader["Email"].ToString() ?? string.Empty,
+                                HasActivePayment = Convert.ToBoolean(reader["HasActivePayment"]),
+                                SubscriptionEndDate = subscriptionEndDate
                             });
                         }
                     }
@@ -298,7 +321,8 @@ namespace Idealista.Helpers
             {
                 connection.Open();
                 using (var command = new SqliteCommand(@"
-            SELECT Id, ClientId, Location, MaxPrice, IncludeOccupied, IncludeProfessional, IncludeBank 
+            SELECT Id, ClientId, Location, MaxPrice, IncludeOccupied, 
+                   IncludeProfessional, IncludeBank, IncludePrivate 
             FROM Subscriptions", connection))
                 {
                     using (var reader = command.ExecuteReader())
@@ -313,13 +337,72 @@ namespace Idealista.Helpers
                                 MaxPrice = Convert.ToInt32(reader["MaxPrice"]),
                                 IncludeOccupied = Convert.ToBoolean(reader["IncludeOccupied"]),
                                 IncludeProfessional = Convert.ToBoolean(reader["IncludeProfessional"]),
-                                IncludeBank = Convert.ToBoolean(reader["IncludeBank"])
+                                IncludeBank = Convert.ToBoolean(reader["IncludeBank"]),
+                                IncludePrivate = Convert.ToBoolean(reader["IncludePrivate"])
                             });
                         }
                     }
                 }
             }
             return subscriptions;
+        }
+
+        public static void UpdateSubscriptionStatus(string clientId)
+        {
+            using var connection = new SqliteConnection(ConnectionString);
+            connection.Open();
+
+            string selectQuery = @"
+                SELECT HasActivePayment, SubscriptionEndDate 
+                FROM Clients 
+                WHERE Id = @ClientId";
+
+            using var selectCommand = new SqliteCommand(selectQuery, connection);
+            selectCommand.Parameters.AddWithValue("@ClientId", clientId);
+
+            using var reader = selectCommand.ExecuteReader();
+            if (reader.Read())
+            {
+                bool currentStatus = Convert.ToBoolean(reader["HasActivePayment"]);
+                string? endDateStr = reader["SubscriptionEndDate"].ToString();
+
+                if (currentStatus && !string.IsNullOrEmpty(endDateStr))
+                {
+                    var endDate = DateTime.Parse(endDateStr);
+
+                    if (DateTime.Now > endDate)
+                    {
+                        // La suscripción ha expirado, actualizamos el estado
+                        string updateQuery = @"
+                            UPDATE Clients 
+                            SET HasActivePayment = 0,
+                                SubscriptionEndDate = NULL
+                            WHERE Id = @ClientId";
+
+                        using var updateCommand = new SqliteCommand(updateQuery, connection);
+                        updateCommand.Parameters.AddWithValue("@ClientId", clientId);
+                        updateCommand.ExecuteNonQuery();
+                    }
+                }
+            }
+        }
+
+        public static void ActivateSubscription(string clientId, int days)
+        {
+            using var connection = new SqliteConnection(ConnectionString);
+            connection.Open();
+
+            string updateQuery = @"
+                UPDATE Clients 
+                SET HasActivePayment = 1,
+                    SubscriptionEndDate = @EndDate
+                WHERE Id = @ClientId";
+
+            using var command = new SqliteCommand(updateQuery, connection);
+            command.Parameters.AddWithValue("@ClientId", clientId);
+            command.Parameters.AddWithValue("@EndDate", DateTime.Now.AddDays(days).ToString("yyyy-MM-dd HH:mm:ss"));
+
+            command.ExecuteNonQuery();
         }
     }
 }

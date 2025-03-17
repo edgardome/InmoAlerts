@@ -195,10 +195,17 @@ class Program
                 Console.WriteLine($"Cliente ID: {sub.ClientId}");
                 Console.WriteLine($"Ciudad: {sub.Location}");
                 Console.WriteLine($"Precio máximo: {sub.MaxPrice:N0}€");
-                Console.WriteLine($"Incluye ocupados: {(sub.IncludeOccupied ? "Sí" : "No")}");
-                Console.WriteLine($"Incluye profesionales: {(sub.IncludeProfessional ? "Sí" : "No")}");
-                Console.WriteLine($"Incluye bancos: {(sub.IncludeBank ? "Sí" : "No")}");
+                Console.WriteLine("Filtros activados:");
+                Console.WriteLine($"  - Particulares: {(sub.IncludePrivate ? "Sí" : "No")}");
+                Console.WriteLine($"  - Profesionales: {(sub.IncludeProfessional ? "Sí" : "No")}");
+                Console.WriteLine($"  - Bancos: {(sub.IncludeBank ? "Sí" : "No")}");
+                Console.WriteLine($"  - Propiedades ocupadas: {(sub.IncludeOccupied ? "Sí" : "No")}");
                 Console.WriteLine("-----------------");
+            }
+
+            if (!subscriptions.Any())
+            {
+                Console.WriteLine("No hay suscripciones registradas.");
             }
         }
         catch (Exception ex)

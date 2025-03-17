@@ -324,7 +324,7 @@ class Program
     static async Task Main(string[] args)
     {
         Console.WriteLine("Iniciando el sistema...");
-        Console.WriteLine("Versión: 1.0.1.1");
+        Console.WriteLine("Versión: 1.0.1.2");
 
         try
         {

@@ -364,19 +364,49 @@ class Program
             }
 
             // Iniciar las tres tareas principales
-            var tasks = new List<Task>
+            var tasks = new List<Task>();
+
+            // Tarea de operaciones de base de datos
+            tasks.Add(Task.Run(async () =>
             {
-            HandleDatabaseOperations(),
-            RunSubscriptionVerification(cts.Token),
-            RunScrapingLoop(locationsConfig.Locations, cts.Token)
-            };
+                try
+                {
+                    await HandleDatabaseOperations();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error en operaciones DB: {ex.Message}");
+                }
+            }));
 
-            // Esperar a que cualquiera de las tareas falle o se complete
-            await Task.WhenAny(tasks);
+            // Tarea de verificación de suscripciones
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    await RunSubscriptionVerification(cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error en verificación: {ex.Message}");
+                }
+            }));
 
-            // Si llegamos aquí, alguna tarea terminó inesperadamente
-            cts.Cancel(); // Cancelar las demás tareas
-            await Task.WhenAll(tasks); // Esperar a que todas terminen
+            // Tarea de scraping
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    await RunScrapingLoop(locationsConfig.Locations, cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error en scraping: {ex.Message}");
+                }
+            }));
+
+            // Esperar a que todas las tareas terminen (solo ocurrirá con Ctrl+C)
+            await Task.WhenAll(tasks);
         }
         catch (Exception ex)
         {

@@ -23,6 +23,7 @@ namespace Idealista.Helpers
                     Url TEXT,
                     Title TEXT,
                     Location TEXT,
+                    Province TEXT,
                     Price INTEGER,
                     Currency TEXT,
                     Description TEXT,
@@ -81,14 +82,15 @@ namespace Idealista.Helpers
             using var connection = new SqliteConnection(ConnectionString);
             connection.Open();
 
-            string insertQuery = @"INSERT INTO Properties (Id, Url, Title, Location, Price, Currency, Description) 
-                               VALUES (@Id, @Url, @Title, @Location, @Price, @Currency, @Description)";
+            string insertQuery = @"INSERT INTO Properties (Id, Url, Title, Location, Province, Price, Currency, Description) 
+                   VALUES (@Id, @Url, @Title, @Location, @Province, @Price, @Currency, @Description)";
 
             using var command = new SqliteCommand(insertQuery, connection);
             command.Parameters.AddWithValue("@Id", property.Id);
             command.Parameters.AddWithValue("@Url", property.Url);
             command.Parameters.AddWithValue("@Title", property.Title);
             command.Parameters.AddWithValue("@Location", property.Location);
+            command.Parameters.AddWithValue("@Province", property.Province);
             command.Parameters.AddWithValue("@Price", property.Price);
             command.Parameters.AddWithValue("@Currency", property.Currency);
             command.Parameters.AddWithValue("@Description", property.Description);

@@ -265,13 +265,14 @@ class Program
             Console.WriteLine($"Resultados para {location.Name}:");
             Console.WriteLine($"--------------------------");
 
-            foreach (var property in properties) // Quitar el .Where(p => !p.IsProfessional)
+            foreach (var property in properties)
             {
                 await _propertyService.ProcessPropertyAsync(property);
                 Console.WriteLine($"Property ID: {property.Id}");
                 Console.WriteLine($"Property URL: {property.Url}");
                 Console.WriteLine($"Title: {property.Title}");
                 Console.WriteLine($"Location: {property.Location}");
+                Console.WriteLine($"Province: {property.Province}");
                 Console.WriteLine($"Price: {property.Price} {property.Currency}");
                 Console.WriteLine($"Description: {property.Description}");
                 Console.WriteLine($"--------------------------");
@@ -300,18 +301,23 @@ class Program
                 {
                     if (cancellationToken.IsCancellationRequested) break;
 
+                    var locationStartTime = DateTime.Now;
                     await ProcessLocation(location);
+                    var processingTime = DateTime.Now - locationStartTime;
+
                     await _consoleLock.WaitAsync();
+                    Console.WriteLine($"Tiempo de procesamiento para {location.Name}: {processingTime.TotalMinutes:F2} minutos");
                     Console.WriteLine($"Esperando 30 segundos antes de la siguiente localización...");
                     _consoleLock.Release();
+
                     await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
                 }
 
                 await _consoleLock.WaitAsync();
-                Console.WriteLine($"Ciclo completado. Esperando 1 hora hasta la próxima ejecución...");
+                Console.WriteLine($"Ciclo completado. Esperando 5 minutos hasta la próxima ejecución...");
                 _consoleLock.Release();
 
-                await Task.Delay(TimeSpan.FromHours(1), cancellationToken);
+                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -331,7 +337,7 @@ class Program
     static async Task Main(string[] args)
     {
         Console.WriteLine("Iniciando el sistema...");
-        Console.WriteLine("Versión: 1.0.1.2");
+        Console.WriteLine("Versión: 1.0.1.3");
 
         try
         {

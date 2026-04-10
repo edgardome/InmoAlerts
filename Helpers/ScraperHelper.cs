@@ -6,13 +6,19 @@ using Microsoft.Extensions.Configuration;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Net;
+using Microsoft.Playwright;
 
 namespace Idealista.Helpers
 {
     public static class ScraperHelper
     {
         private static readonly ScraperSettings _scraperSettings;
-        private static readonly HttpClient client = new HttpClient();
+        private static IPlaywright? _playwright;
+        private static IBrowser? _browser;
+        private static IBrowserContext? _context;
+        private static IPage? _mainPage;
+        private static bool _browsersInstalled = false;
 
         static ScraperHelper()
         {
@@ -25,7 +31,53 @@ namespace Idealista.Helpers
                 ?? throw new InvalidOperationException("Scraper settings not found");
         }
 
-        public static async Task<List<Property>> ScrapeProperties(Location location)
+        private static async Task EnsureBrowsersInstalledAsync()
+        {
+            if (!_browsersInstalled)
+            {
+                Console.WriteLine("Instalando navegadores de Playwright (solo la primera vez)...");
+                var exitCode = Microsoft.Playwright.Program.Main(new[] { "install", "chromium" });
+                if (exitCode != 0)
+                {
+                    throw new Exception("Error al instalar los navegadores de Playwright");
+                }
+                _browsersInstalled = true;
+                Console.WriteLine("Navegadores instalados correctamente");
+            }
+        }
+
+        private static async Task EnsureBrowserContextAsync()
+        {
+            await EnsureBrowsersInstalledAsync();
+
+            if (_playwright == null)
+            {
+                _playwright = await Playwright.CreateAsync();
+                _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+                {
+                    Headless = false, // Ahora siempre visible
+                    Args = new[] { "--disable-blink-features=AutomationControlled" }
+                });
+            }
+
+            if (_context == null)
+            {
+                _context = await _browser!.NewContextAsync(new BrowserNewContextOptions
+                {
+                    UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    Locale = "es-ES",
+                    ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
+                    JavaScriptEnabled = true
+                });
+            }
+
+            if (_mainPage == null)
+            {
+                _mainPage = await _context.NewPageAsync();
+            }
+        }
+
+        public static async Task<List<Property>> ScrapeProperties(Models.Location location)
         {
             try
             {
@@ -35,17 +87,12 @@ namespace Idealista.Helpers
                 Console.WriteLine($"Iniciando scraping de: {location.Url}");
                 var startTime = DateTime.Now;
 
+                var content = await ScrapeWithPlaywrightAsync(location.Url);
+                
                 var doc = new HtmlDocument();
-                var requestMessage = new HttpRequestMessage(HttpMethod.Get, location.Url);
-
-                // Agregar los encabezados necesarios
-                Utils.SetDefaultHeaders(requestMessage);
-
-                HttpResponseMessage response = await client.SendAsync(requestMessage);
-                string content = await Utils.DecodeGzip(response);
+                doc.LoadHtml(content);
                 string name = location.Name;
 
-                doc.LoadHtml(content);
                 var properties = new List<Property>();
                 var articles = doc.DocumentNode.SelectNodes("//article[contains(@class, 'item')]");
 
@@ -83,6 +130,68 @@ namespace Idealista.Helpers
             }
         }
 
+        private static async Task<string> ScrapeWithPlaywrightAsync(string url, int maxRetries = 3)
+        {
+            for (int i = 0; i < maxRetries; i++)
+            {
+                try
+                {
+                    if (i > 0)
+                    {
+                        Console.WriteLine($"Reintentando ({i + 1}/{maxRetries})...");
+                        await Task.Delay(new Random().Next(3000, 6000));
+                    }
+
+                    await EnsureBrowserContextAsync();
+
+                    // Visita la página principal primero solo si es el primer intento
+                    if (i == 0)
+                    {
+                        Console.WriteLine("Visitando página principal de Idealista...");
+                        await _mainPage!.GotoAsync("https://www.idealista.com", new PageGotoOptions
+                        {
+                            WaitUntil = WaitUntilState.DOMContentLoaded,
+                            Timeout = 30000
+                        });
+
+                        await _mainPage.WaitForTimeoutAsync(new Random().Next(2000, 4000));
+                    }
+
+                    // Navega a la URL objetivo
+                    Console.WriteLine($"Navegando a: {url}");
+                    await _mainPage!.GotoAsync(url, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 30000
+                    });
+
+                    await _mainPage.WaitForTimeoutAsync(1000);
+
+                    var html = await _mainPage.ContentAsync();
+
+                    // Verificar si hay captcha
+                    if (html.Contains("se ha bloqueado", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new Exception("Captcha detectado");
+                    }
+
+                    Console.WriteLine("Página obtenida correctamente");
+                    return html;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error en intento {i + 1}: {ex.Message}");
+                    
+                    if (i == maxRetries - 1)
+                    {
+                        throw new Exception($"Error después de {maxRetries} intentos: {ex.Message}", ex);
+                    }
+                }
+            }
+
+            throw new Exception("No se pudo completar el scraping");
+        }
+
         private static async Task<Property?> ProcessArticle(HtmlNode article, string location)
         {
             HtmlDocument articleDoc = new HtmlDocument();
@@ -93,13 +202,8 @@ namespace Idealista.Helpers
             property.Url = $"https://www.idealista.com/inmueble/{property.Id}/";
 
             var url = $"https://www.idealista.com/es/ajax/listingController/adContactInfoForListing.ajax?adId={property.Id}";
-            var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
-
-            Utils.SetDefaultHeaders(requestMessage);
-
-            await Task.Delay(new Random().Next(3000, 10001));
-            var response = await client.SendAsync(requestMessage);
-            var content = await Utils.DecodeGzip(response);
+            
+            var content = await GetArticleDetailsAsync(url);
 
             var propertyJson = JsonConvert.DeserializeObject<JObject>(content);
             if (propertyJson == null) return null;
@@ -110,19 +214,125 @@ namespace Idealista.Helpers
             property.IsProfessional = data["isAdProfessional"]?.ToObject<bool?>() ?? false;
             property.IsBank = data["agencyIsABank"]?.ToObject<bool?>() ?? false;
             property.Title = data["shortDescription"]?.ToString() ?? "";
-            property.Location = location;
+            property.Location = data["micrositeCityName"]?.ToString() ?? "";
+            property.Province = location;
             property.Currency = "€";
             string priceText = articleDoc.DocumentNode.SelectSingleNode("//span[contains(@class,'item-price')]")?.InnerText.Trim().Replace(",", "").Replace("€", "").Replace(".", "") ?? "0";
             property.Price = int.TryParse(priceText, out int price) ? price : 0;
             property.Description = articleDoc.DocumentNode.SelectSingleNode("//div[contains(@class,'item-description')]//p")?.InnerText.Trim() ?? "";
 
-            if (!DatabaseHelper.PropertyExists(property.Id))
+            if (!DatabaseHelper.PropertyExists(property.Id) && !property.IsProfessional)
             {
                 DatabaseHelper.InsertProperty(property);
                 await EmailHelper.SendPropertyEmail(property);
             }
 
             return property;
+        }
+
+        private static async Task<string> GetArticleDetailsAsync(string url, int maxRetries = 3)
+        {
+            Exception? lastException = null;
+            
+            for (int i = 0; i < maxRetries; i++)
+            {
+                IPage? ajaxPage = null;
+                try
+                {
+                    if (i > 0)
+                    {
+                        await Task.Delay(new Random().Next(2000, 4000));
+                    }
+
+                    await EnsureBrowserContextAsync();
+
+                    // Espera aleatoria antes de la petición
+                    await Task.Delay(new Random().Next(500, 1500));
+
+                    // Crear una nueva página para la petición AJAX
+                    ajaxPage = await _context!.NewPageAsync();
+
+                    var response = await ajaxPage.GotoAsync(url, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 10000
+                    });
+
+                    if (response == null || !response.Ok)
+                    {
+                        throw new Exception($"Error en la petición AJAX: {response?.Status}");
+                    }
+
+                    var content = await ajaxPage.ContentAsync();
+
+                    // Extraer el JSON del body
+                    var jsonMatch = Regex.Match(content, @"<pre[^>]*>(.*?)</pre>", RegexOptions.Singleline);
+                    if (jsonMatch.Success)
+                    {
+                        return jsonMatch.Groups[1].Value;
+                    }
+
+                    // Si no está en un tag pre, intentar obtener el body directamente
+                    var bodyContent = Regex.Match(content, @"<body[^>]*>(.*?)</body>", RegexOptions.Singleline);
+                    if (bodyContent.Success)
+                    {
+                        var cleanContent = bodyContent.Groups[1].Value.Trim();
+                        // Intentar parsear como JSON para verificar
+                        try
+                        {
+                            JsonConvert.DeserializeObject(cleanContent);
+                            return cleanContent;
+                        }
+                        catch
+                        {
+                            // Si no es JSON válido, devolver el contenido completo
+                            return content;
+                        }
+                    }
+
+                    return content;
+                }
+                catch (Exception ex)
+                {
+                    lastException = ex;
+                    Console.WriteLine($"Error obteniendo detalles del artículo (intento {i + 1}): {ex.Message}");
+                }
+                finally
+                {
+                    if (ajaxPage != null)
+                    {
+                        await ajaxPage.CloseAsync();
+                    }
+                }
+            }
+
+            throw new Exception($"Error después de {maxRetries} intentos obteniendo detalles: {lastException?.Message}", lastException);
+        }
+
+        public static async Task DisposeAsync()
+        {
+            if (_mainPage != null)
+            {
+                await _mainPage.CloseAsync();
+                _mainPage = null;
+            }
+
+            if (_context != null)
+            {
+                await _context.CloseAsync();
+                await _context.DisposeAsync();
+                _context = null;
+            }
+
+            if (_browser != null)
+            {
+                await _browser.CloseAsync();
+                await _browser.DisposeAsync();
+                _browser = null;
+            }
+
+            _playwright?.Dispose();
+            _playwright = null;
         }
     }
 }

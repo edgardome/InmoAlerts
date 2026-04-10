@@ -1,20 +1,8 @@
 {
   "Locations": [
     {
-      "Name": "Plana Alta",
-      "Url": "https://www.idealista.com/venta-viviendas/castellon/plana-alta/?ordenado-por=fecha-publicacion-desc"
-    },
-    {
-      "Name": "Plana Baixa",
-      "Url": "https://www.idealista.com/venta-viviendas/castellon/plana-baixa/?ordenado-por=fecha-publicacion-desc"
-    },
-    {
-      "Name": "Valencia",
-      "Url": "https://www.idealista.com/areas/venta-viviendas/?shape=%28%28kpzoFp%7CaBu%7D%5BsaMdmCu%7E_%40jcl%40jtJiBbzRqoSxpN%29%29&ordenado-por=fecha-publicacion-desc"
-    },
-    {
-      "Name": "Alcoy Area",
-      "Url": "https://www.idealista.com/areas/venta-viviendas/?shape=%28%28oo%7EjFb%7CcBwfT%7DpCaX%7BoIjmBcoEltSldElfE%7EcCmiGngJ%29%29&ordenado-por=fecha-publicacion-desc"
+      "Name": "Caceres",
+      "Url": "https://www.idealista.com/venta-viviendas/caceres-caceres/?ordenado-por=fecha-publicacion-desc"
     }
   ]
 }

@@ -98,34 +98,5 @@ namespace Idealista.Helpers
 
             return stringBuilder.ToString().Normalize(NormalizationForm.FormC);
         }
-
-        public static async Task CheckSubscriptionsAsync(CancellationToken cancellationToken)
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    var clients = DatabaseHelper.GetAllClients();
-                    foreach (var client in clients)
-                    {
-                        DatabaseHelper.UpdateSubscriptionStatus(client.Id);
-                    }
-
-                    // Esperar 24 horas antes de la próxima verificación
-                    await Task.Delay(TimeSpan.FromHours(24), cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Manejo normal de la cancelación
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error durante la verificación de suscripciones: {ex.Message}");
-                    // Esperar 1 hora antes de reintentar en caso de error
-                    await Task.Delay(TimeSpan.FromHours(1), cancellationToken);
-                }
-            }
-        }
     }
 }

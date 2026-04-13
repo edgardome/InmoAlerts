@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Net;
 using Microsoft.Playwright;
+using System.Diagnostics;
 
 namespace Idealista.Helpers
 {
@@ -55,9 +56,16 @@ namespace Idealista.Helpers
                 _playwright = await Playwright.CreateAsync();
                 _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                 {
-                    Headless = false, // Ahora siempre visible
-                    Args = new[] { "--disable-blink-features=AutomationControlled" }
+                    Headless = false,
+                    Args = new[] 
+                    { 
+                        "--disable-blink-features=AutomationControlled",
+                        "--window-position=-2400,-2400" // Mover la ventana fuera de la pantalla
+                    }
                 });
+
+                // Minimizar usando PowerShell
+                _ = Task.Run(() => MinimizeBrowserWindows());
             }
 
             if (_context == null)
@@ -74,6 +82,49 @@ namespace Idealista.Helpers
             if (_mainPage == null)
             {
                 _mainPage = await _context.NewPageAsync();
+            }
+        }
+
+        private static void MinimizeBrowserWindows()
+        {
+            try
+            {
+                // Esperar a que la ventana se cree
+                Thread.Sleep(2000);
+
+                // Usar PowerShell para minimizar todas las ventanas de Chrome
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = @"-Command ""
+                        Add-Type @'
+                            using System;
+                            using System.Runtime.InteropServices;
+                            public class Win32 {
+                                [DllImport(""user32.dll"")]
+                                public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+                                [DllImport(""user32.dll"")]
+                                public static extern bool SetForegroundWindow(IntPtr hWnd);
+                            }
+'@
+                        $processes = Get-Process | Where-Object {$_.ProcessName -like '*chrome*' -or $_.ProcessName -like '*msedge*'}
+                        foreach ($proc in $processes) {
+                            if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
+                                [Win32]::ShowWindow($proc.MainWindowHandle, 6) | Out-Null
+                            }
+                        }
+                    """,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+
+                Process.Start(psi);
+                Console.WriteLine("✓ Ventana del navegador minimizada");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠ No se pudo minimizar: {ex.Message}");
             }
         }
 

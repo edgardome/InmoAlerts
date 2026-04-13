@@ -1,429 +1,401 @@
-﻿using Idealista.Helpers;
+﻿using Terminal.Gui;
+using Idealista.Helpers;
 using Idealista.Models;
-using Idealista.Services;
 using Newtonsoft.Json;
 
 class Program
 {
-    private static readonly HttpClient client = new HttpClient();
-    private static volatile bool _dbOperationsRunning = true;
-    private static readonly SemaphoreSlim _consoleLock = new(1, 1);
+    private static TextView? _logView;
+    private static Label? _statusLabel;
+    private static Label? _countLabel;
+    private static Label? _lastRunLabel;
+    private static ListView? _locationsList;
+    private static bool _isRunning = false;
+    private static CancellationTokenSource? _cancellationTokenSource;
 
-    private static readonly ClientService _clientService = new();
-    private static readonly SubscriptionService _subscriptionService = new();
-    private static readonly PropertyService _propertyService = new();
-
-    private static async Task HandleDatabaseOperations()
+    static void Main(string[] args)
     {
-        while (_dbOperationsRunning)
+        Application.Init();
+
+        var top = Application.Top;
+
+        // Ventana principal
+        var window = new Window("Idealista Property Scraper - v1.0")
         {
-            await _consoleLock.WaitAsync();
-            try
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill()
+        };
+
+        // Panel de estado
+        var statusFrame = new FrameView("Estado del Sistema")
+        {
+            X = 1,
+            Y = 1,
+            Width = Dim.Fill() - 1,
+            Height = 6
+        };
+
+        _statusLabel = new Label("🔴 Estado: Detenido")
+        {
+            X = 1,
+            Y = 0,
+            Width = Dim.Fill() - 2
+        };
+
+        _countLabel = new Label("📊 Propiedades en BD: Cargando...")
+        {
+            X = 1,
+            Y = 1,
+            Width = Dim.Fill() - 2
+        };
+
+        _lastRunLabel = new Label("⏰ Último ciclo: Nunca")
+        {
+            X = 1,
+            Y = 2,
+            Width = Dim.Fill() - 2
+        };
+
+        statusFrame.Add(_statusLabel, _countLabel, _lastRunLabel);
+
+        // Panel de ubicaciones
+        var locationsFrame = new FrameView("Ubicaciones Configuradas")
+        {
+            X = 1,
+            Y = 7,
+            Width = 40,
+            Height = Dim.Fill() - 11
+        };
+
+        _locationsList = new ListView()
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill()
+        };
+
+        locationsFrame.Add(_locationsList);
+
+        // Panel de log
+        var logFrame = new FrameView("Log de Actividad")
+        {
+            X = 42,
+            Y = 7,
+            Width = Dim.Fill() - 1,
+            Height = Dim.Fill() - 11
+        };
+
+        _logView = new TextView()
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            ReadOnly = true,
+            WordWrap = true
+        };
+
+        logFrame.Add(_logView);
+
+        // Botones
+        var startButton = new Button("▶ Iniciar Scraping")
+        {
+            X = 1,
+            Y = Pos.Bottom(window) - 3
+        };
+
+        var stopButton = new Button("⏸ Detener")
+        {
+            X = Pos.Right(startButton) + 2,
+            Y = Pos.Bottom(window) - 3,
+            Enabled = false
+        };
+
+        var clearLogButton = new Button("🗑 Limpiar Log")
+        {
+            X = Pos.Right(stopButton) + 2,
+            Y = Pos.Bottom(window) - 3
+        };
+
+        var exitButton = new Button("❌ Salir")
+        {
+            X = Pos.Right(clearLogButton) + 2,
+            Y = Pos.Bottom(window) - 3
+        };
+
+        // Eventos de botones
+        startButton.Clicked += async () =>
+        {
+            if (!_isRunning)
             {
-                Console.WriteLine("\nOperaciones disponibles:");
-                Console.WriteLine("1. Crear nuevo cliente");
-                Console.WriteLine("2. Crear nueva suscripción");
-                Console.WriteLine("3. Ver clientes actuales");
-                Console.WriteLine("4. Ver suscripciones");
-                Console.WriteLine("5. Salir del menú de operaciones");
-                Console.Write("Seleccione una opción: ");
+                _isRunning = true;
+                startButton.Enabled = false;
+                stopButton.Enabled = true;
+                _cancellationTokenSource = new CancellationTokenSource();
+                
+                _ = Task.Run(async () => await StartScrapingAsync(_cancellationTokenSource.Token));
+            }
+        };
 
-                string? input = Console.ReadLine();
+        stopButton.Clicked += () =>
+        {
+            _isRunning = false;
+            _cancellationTokenSource?.Cancel();
+            startButton.Enabled = true;
+            stopButton.Enabled = false;
+            UpdateStatus("🔴 Detenido por usuario");
+            Log("⏹ Scraping detenido manualmente");
+        };
 
-                switch (input)
+        clearLogButton.Clicked += () =>
+        {
+            Application.MainLoop.Invoke(() =>
+            {
+                if (_logView != null)
+                    _logView.Text = "";
+            });
+            Log("🗑 Log limpiado");
+        };
+
+        exitButton.Clicked += () =>
+        {
+            if (_isRunning)
+            {
+                var result = MessageBox.Query("Confirmar salida", 
+                    "El scraping está en ejecución. ¿Desea salir?", "Sí", "No");
+                if (result == 0)
                 {
-                    case "1":
-                        await CreateNewClient();
-                        break;
-                    case "2":
-                        await CreateNewSubscription();
-                        break;
-                    case "3":
-                        await ViewClients();
-                        break;
-                    case "4":
-                        await ViewSubscriptions();
-                        break;
-                    case "5":
-                        _dbOperationsRunning = false;
-                        Console.WriteLine("Saliendo del menú de operaciones. El scraping continuará ejecutándose.");
-                        break;
-                    default:
-                        Console.WriteLine("Opción no válida");
-                        break;
+                    _cancellationTokenSource?.Cancel();
+                    Application.RequestStop();
                 }
-            }
-            finally
-            {
-                _consoleLock.Release();
-            }
-
-            await Task.Delay(100);
-        }
-    }
-
-    private static async Task CreateNewClient()
-    {
-        try
-        {
-            Console.Write("Nombre del cliente: ");
-            string? name = Console.ReadLine();
-            Console.Write("Email del cliente: ");
-            string? email = Console.ReadLine();
-            Console.Write("¿Activar suscripción ahora? (s/N): ");
-            string? activateNow = Console.ReadLine();
-            Console.Write("Días de suscripción (Enter para 30 días): ");
-            string? daysStr = Console.ReadLine();
-
-            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(email))
-            {
-                Console.WriteLine("Nombre y email son requeridos");
-                return;
-            }
-
-            bool hasActivePayment = activateNow?.Trim().ToLower() == "s";
-            int subscriptionDays = string.IsNullOrWhiteSpace(daysStr) ? 30 : int.Parse(daysStr);
-
-            var client = new Client
-            {
-                Id = Guid.NewGuid().ToString(),
-                Name = name,
-                Email = email,
-                HasActivePayment = hasActivePayment,
-                SubscriptionEndDate = hasActivePayment ? DateTime.Now.AddDays(subscriptionDays) : null
-            };
-
-            await _clientService.InsertClientAsync(client);
-            Console.WriteLine($"Cliente creado con ID: {client.Id}");
-
-            if (hasActivePayment)
-            {
-                Console.WriteLine($"Suscripción activada hasta: {client.SubscriptionEndDate:dd/MM/yyyy HH:mm}");
             }
             else
             {
-                Console.WriteLine("Cliente creado sin suscripción activa");
+                Application.RequestStop();
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al crear cliente: {ex.Message}");
-        }
+        };
+
+        window.Add(statusFrame, locationsFrame, logFrame, startButton, stopButton, clearLogButton, exitButton);
+        top.Add(window);
+
+        // Inicializar sistema
+        InitializeSystem();
+
+        Application.Run();
+        Application.Shutdown();
+        
+        // Cleanup
+        ScraperHelper.DisposeAsync().GetAwaiter().GetResult();
     }
 
-    private static async Task CreateNewSubscription()
+    static void InitializeSystem()
     {
         try
         {
-            await ViewClients();
-
-            Console.Write("ID del cliente: ");
-            string? clientId = Console.ReadLine();
-            Console.Write("Ciudad para la suscripción: ");
-            string? city = Console.ReadLine();
-            Console.Write("Precio máximo (Enter para sin límite): ");
-            string? maxPriceStr = Console.ReadLine();
-            Console.Write("¿Incluir pisos ocupados? (s/N): ");
-            string? includeOccupiedStr = Console.ReadLine();
-            Console.Write("¿Incluir anuncios profesionales? (s/N): ");
-            string? includeProfessionalStr = Console.ReadLine();
-            Console.Write("¿Incluir anuncios de bancos? (s/N): ");
-            string? includeBankStr = Console.ReadLine();
-
-            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(city))
-            {
-                Console.WriteLine("ID del cliente y ciudad son requeridos");
-                return;
-            }
-
-            var subscription = new Subscription
-            {
-                Id = Guid.NewGuid().ToString(),
-                ClientId = clientId,
-                Location = city,
-                MaxPrice = string.IsNullOrWhiteSpace(maxPriceStr) ? 1000000 : int.Parse(maxPriceStr),
-                IncludeOccupied = includeOccupiedStr?.Trim().ToLower() == "s",
-                IncludeProfessional = includeProfessionalStr?.Trim().ToLower() == "s",
-                IncludeBank = includeBankStr?.Trim().ToLower() == "s"
-            };
-
-            await _subscriptionService.InsertSubscriptionAsync(subscription);
-            Console.WriteLine($"Suscripción creada con ID: {subscription.Id}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al crear suscripción: {ex.Message}");
-        }
-    }
-
-    private static async Task ViewClients()
-    {
-        try
-        {
-            var clients = await _clientService.GetAllClientsAsync();
-            Console.WriteLine("\nClientes actuales:");
-            Console.WriteLine("-----------------");
-            foreach (var client in clients)
-            {
-                Console.WriteLine($"ID: {client.Id}");
-                Console.WriteLine($"Nombre: {client.Name}");
-                Console.WriteLine($"Email: {client.Email}");
-                Console.WriteLine($"Suscripción activa: {(client.HasActivePayment ? "Sí" : "No")}");
-                if (client.SubscriptionEndDate.HasValue)
-                {
-                    Console.WriteLine($"Fecha fin suscripción: {client.SubscriptionEndDate:dd/MM/yyyy HH:mm}");
-                }
-                Console.WriteLine("-----------------");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al obtener clientes: {ex.Message}");
-        }
-    }
-
-    private static async Task ViewSubscriptions()
-    {
-        try
-        {
-            var subscriptions = await _subscriptionService.GetAllSubscriptionsAsync();
-            Console.WriteLine("\nSuscripciones actuales:");
-            Console.WriteLine("-----------------");
-            foreach (var sub in subscriptions)
-            {
-                Console.WriteLine($"ID: {sub.Id}");
-                Console.WriteLine($"Cliente ID: {sub.ClientId}");
-                Console.WriteLine($"Ciudad: {sub.Location}");
-                Console.WriteLine($"Precio máximo: {sub.MaxPrice:N0}€");
-                Console.WriteLine("Filtros activados:");
-                Console.WriteLine($"  - Particulares: {(sub.IncludePrivate ? "Sí" : "No")}");
-                Console.WriteLine($"  - Profesionales: {(sub.IncludeProfessional ? "Sí" : "No")}");
-                Console.WriteLine($"  - Bancos: {(sub.IncludeBank ? "Sí" : "No")}");
-                Console.WriteLine($"  - Propiedades ocupadas: {(sub.IncludeOccupied ? "Sí" : "No")}");
-                Console.WriteLine("-----------------");
-            }
-
-            if (!subscriptions.Any())
-            {
-                Console.WriteLine("No hay suscripciones registradas.");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error al obtener suscripciones: {ex.Message}");
-        }
-    }
-
-    private static async Task RunSubscriptionVerification(CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                await _consoleLock.WaitAsync();
-                Console.WriteLine($"\nVerificando estados de suscripción: {DateTime.Now}");
-                _consoleLock.Release();
-
-                var clients = await _clientService.GetAllClientsAsync();
-                foreach (var client in clients)
-                {
-                    DatabaseHelper.UpdateSubscriptionStatus(client.Id);
-                }
-
-                // Verificar cada 24 horas
-                await Task.Delay(TimeSpan.FromHours(24), cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                await _consoleLock.WaitAsync();
-                Console.WriteLine($"Error en verificación de suscripciones: {ex.Message}");
-                Console.WriteLine("Reintentando en 1 hora...");
-                _consoleLock.Release();
-
-                // En caso de error, esperar 1 hora antes de reintentar
-                await Task.Delay(TimeSpan.FromHours(1), cancellationToken);
-            }
-        }
-    }
-
-    private static async Task ProcessLocation(Location location)
-    {
-        try
-        {
-            await _consoleLock.WaitAsync();
-            Console.WriteLine($"\nProcesando localizacion: {location.Name}");
-            _consoleLock.Release();
-
-            var properties = await ScraperHelper.ScrapeProperties(location);
-
-            await _consoleLock.WaitAsync();
-            Console.WriteLine($"--------------------------");
-            Console.WriteLine($"Resultados para {location.Name}:");
-            Console.WriteLine($"--------------------------");
-
-            foreach (var property in properties)
-            {
-                await _propertyService.ProcessPropertyAsync(property);
-                Console.WriteLine($"Property ID: {property.Id}");
-                Console.WriteLine($"Property URL: {property.Url}");
-                Console.WriteLine($"Title: {property.Title}");
-                Console.WriteLine($"Location: {property.Location}");
-                Console.WriteLine($"Province: {property.Province}");
-                Console.WriteLine($"Price: {property.Price} {property.Currency}");
-                Console.WriteLine($"Description: {property.Description}");
-                Console.WriteLine($"--------------------------");
-            }
-            _consoleLock.Release();
-        }
-        catch (Exception ex)
-        {
-            await _consoleLock.WaitAsync();
-            Console.WriteLine($"Error procesando {location.Name}: {ex.Message}");
-            _consoleLock.Release();
-        }
-    }
-
-    private static async Task RunScrapingLoop(List<Location> locations, CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                await _consoleLock.WaitAsync();
-                Console.WriteLine($"\nIniciando scraping: {DateTime.Now}");
-                _consoleLock.Release();
-
-                foreach (var location in locations)
-                {
-                    if (cancellationToken.IsCancellationRequested) break;
-
-                    var locationStartTime = DateTime.Now;
-                    await ProcessLocation(location);
-                    var processingTime = DateTime.Now - locationStartTime;
-
-                    await _consoleLock.WaitAsync();
-                    Console.WriteLine($"Tiempo de procesamiento para {location.Name}: {processingTime.TotalMinutes:F2} minutos");
-                    Console.WriteLine($"Esperando 30 segundos antes de la siguiente localización...");
-                    _consoleLock.Release();
-
-                    await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
-                }
-
-                await _consoleLock.WaitAsync();
-                Console.WriteLine($"Ciclo completado. Esperando 5 minutos hasta la próxima ejecución...");
-                _consoleLock.Release();
-
-                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                await _consoleLock.WaitAsync();
-                Console.WriteLine($"Error durante el ciclo de scraping: {ex.Message}");
-                Console.WriteLine("Reintentando en 1 minuto...");
-                _consoleLock.Release();
-                await Task.Delay(TimeSpan.FromMinutes(1), cancellationToken);
-            }
-        }
-    }
-
-    static async Task Main(string[] args)
-    {
-        Console.WriteLine("Iniciando el sistema...");
-        Console.WriteLine("Versión: 1.0.1.3");
-
-        try
-        {
-            using var cts = new CancellationTokenSource();
-            Console.CancelKeyPress += (s, e) =>
-            {
-                Console.WriteLine("Deteniendo el sistema...");
-                cts.Cancel();
-                e.Cancel = true;
-            };
-
+            Log("🚀 Iniciando sistema...");
+            
             // Inicializar base de datos
             DatabaseHelper.InitializeDatabase();
+            Log("✓ Base de datos inicializada");
+            
+            // Cargar ubicaciones
+            string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
+            string jsonContent = File.ReadAllText(jsonPath);
+            var locationData = JsonConvert.DeserializeObject<LocationData>(jsonContent);
 
-            // Cargar configuración
-            string locationsJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
-            if (!File.Exists(locationsJsonPath))
+            if (locationData?.Locations != null && locationData.Locations.Count > 0)
             {
-                Console.WriteLine("Error: No se encuentra el archivo Resources/locations.json");
-                return;
+                var locationNames = locationData.Locations.Select(l => l.Name).ToList();
+                
+                Application.MainLoop.Invoke(() =>
+                {
+                    if (_locationsList != null)
+                    {
+                        _locationsList.SetSource(locationNames);
+                    }
+                });
+
+                Log($"✓ Cargadas {locationData.Locations.Count} ubicación(es)");
+            }
+            else
+            {
+                Log("⚠ No se encontraron ubicaciones en locations.json");
             }
 
-            string locationsJson = File.ReadAllText(locationsJsonPath);
-            var locationsConfig = JsonConvert.DeserializeObject<LocationsConfig>(locationsJson);
-
-            if (locationsConfig?.Locations == null || !locationsConfig.Locations.Any())
-            {
-                Console.WriteLine("No se encontraron localizaciones para procesar en locations.json");
-                return;
-            }
-
-            // Iniciar las tres tareas principales
-            var tasks = new List<Task>();
-
-            // Tarea de operaciones de base de datos
-            tasks.Add(Task.Run(async () =>
-            {
-                try
-                {
-                    await HandleDatabaseOperations();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error en operaciones DB: {ex.Message}");
-                }
-            }));
-
-            // Tarea de verificación de suscripciones
-            tasks.Add(Task.Run(async () =>
-            {
-                try
-                {
-                    await RunSubscriptionVerification(cts.Token);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error en verificación: {ex.Message}");
-                }
-            }));
-
-            // Tarea de scraping
-            tasks.Add(Task.Run(async () =>
-            {
-                try
-                {
-                    await RunScrapingLoop(locationsConfig.Locations, cts.Token);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error en scraping: {ex.Message}");
-                }
-            }));
-
-            // Esperar a que todas las tareas terminen (solo ocurrirá con Ctrl+C)
-            await Task.WhenAll(tasks);
+            // Actualizar contador
+            UpdateCount();
+            
+            Log("✓ Sistema listo");
+            Log("ℹ Presione 'Iniciar Scraping' para comenzar");
         }
         catch (Exception ex)
         {
-            await _consoleLock.WaitAsync();
-            Console.WriteLine($"Error fatal: {ex.Message}");
-            _consoleLock.Release();
+            Log($"❌ Error en inicialización: {ex.Message}");
+        }
+    }
+
+    static async Task StartScrapingAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            UpdateStatus("🟢 Ejecutando...");
+            Log("▶ Iniciando ciclo de scraping...");
+
+            string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
+            string jsonContent = File.ReadAllText(jsonPath);
+            var locationData = JsonConvert.DeserializeObject<LocationData>(jsonContent);
+
+            if (locationData?.Locations == null || locationData.Locations.Count == 0)
+            {
+                Log("❌ No hay ubicaciones configuradas");
+                return;
+            }
+
+            while (_isRunning && !cancellationToken.IsCancellationRequested)
+            {
+                Log($"\n{'═',50}");
+                Log($"🔄 Nuevo ciclo - {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+                Log($"{'═',50}\n");
+
+                foreach (var location in locationData.Locations)
+                {
+                    if (!_isRunning || cancellationToken.IsCancellationRequested) break;
+
+                    try
+                    {
+                        // Highlight ubicación actual
+                        HighlightLocation(locationData.Locations.IndexOf(location));
+
+                        Log($"🔍 Procesando: {location.Name}");
+                        var startTime = DateTime.Now;
+
+                        var properties = await ScraperHelper.ScrapeProperties(location);
+
+                        var duration = (DateTime.Now - startTime).TotalMinutes;
+                        Log($"⏱ Completado en {duration:F2} minutos");
+                        Log($"📦 Propiedades encontradas: {properties.Count}");
+                        
+                        UpdateCount();
+
+                        if (location != locationData.Locations.Last() && _isRunning)
+                        {
+                            Log("⏳ Esperando 30 segundos antes de la siguiente ubicación...\n");
+                            await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Log("⏹ Operación cancelada");
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"❌ Error en {location.Name}: {ex.Message}\n");
+                    }
+                }
+
+                await ScraperHelper.DisposeAsync();
+                UpdateLastRun();
+
+                if (_isRunning && !cancellationToken.IsCancellationRequested)
+                {
+                    Log("\n✓ Ciclo completado");
+                    Log("⏰ Próximo ciclo en 5 minutos...\n");
+                    await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Log("⏹ Scraping cancelado");
+        }
+        catch (Exception ex)
+        {
+            Log($"❌ Error crítico: {ex.Message}");
         }
         finally
         {
-            _dbOperationsRunning = false;
-            Console.WriteLine("Programa finalizado.");
+            _isRunning = false;
+            UpdateStatus("🔴 Detenido");
+            
+            Application.MainLoop.Invoke(() =>
+            {
+                var buttons = Application.Top.Subviews[0].Subviews.OfType<Button>().ToList();
+                if (buttons.Count >= 2)
+                {
+                    buttons[0].Enabled = true;  // Start
+                    buttons[1].Enabled = false; // Stop
+                }
+            });
         }
     }
+
+    static void HighlightLocation(int index)
+    {
+        Application.MainLoop.Invoke(() =>
+        {
+            if (_locationsList != null)
+            {
+                _locationsList.SelectedItem = index;
+            }
+        });
+    }
+
+    static void UpdateStatus(string status)
+    {
+        Application.MainLoop.Invoke(() =>
+        {
+            if (_statusLabel != null)
+                _statusLabel.Text = status;
+        });
+    }
+
+    static void UpdateCount()
+    {
+        Application.MainLoop.Invoke(() =>
+        {
+            if (_countLabel != null)
+            {
+                try
+                {
+                    int count = DatabaseHelper.GetPropertyCount();
+                    _countLabel.Text = $"📊 Propiedades en BD: {count:N0}";
+                }
+                catch (Exception ex)
+                {
+                    _countLabel.Text = $"📊 Propiedades en BD: Error ({ex.Message})";
+                }
+            }
+        });
+    }
+
+    static void UpdateLastRun()
+    {
+        Application.MainLoop.Invoke(() =>
+        {
+            if (_lastRunLabel != null)
+                _lastRunLabel.Text = $"⏰ Último ciclo: {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
+        });
+    }
+
+    static void Log(string message)
+    {
+        Application.MainLoop.Invoke(() =>
+        {
+            if (_logView != null)
+            {
+                var timestamp = DateTime.Now.ToString("HH:mm:ss");
+                _logView.Text += $"[{timestamp}] {message}\n";
+                _logView.MoveEnd();
+            }
+        });
+    }
+}
+
+public class LocationData
+{
+    public List<Location> Locations { get; set; } = new();
 }

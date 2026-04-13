@@ -1,5 +1,5 @@
-﻿using System.Net.Mail;
-using System.Net;
+﻿using System.Net;
+using System.Net.Mail;
 using System.Net.Mime;
 using Idealista.Configuration;
 using Idealista.Models;
@@ -26,11 +26,9 @@ namespace Idealista.Helpers
         {
             try
             {
-                List<string> emailList = DatabaseHelper.GetEmailsForLocation(property);
-
-                if (emailList.Count == 0)
+                if (_emailSettings.Recipients == null || _emailSettings.Recipients.Count == 0)
                 {
-                    Console.WriteLine($"No hay clientes suscritos que cumplan los filtros de la propiedad {property.Id}.");
+                    Console.WriteLine("No hay destinatarios configurados en appsettings.json");
                     return;
                 }
 
@@ -44,45 +42,69 @@ namespace Idealista.Helpers
                 var mailMessage = new MailMessage
                 {
                     From = new MailAddress(_emailSettings.FromEmail),
-                    Subject = $"Inmueble detectado: {property.Title}, {property.Location}",
+                    Subject = $"Nueva propiedad: {property.Title} - {property.Price}{property.Currency}",
                     IsBodyHtml = true
                 };
 
+                string vendorType = property.IsBank ? "Banco" : 
+                                   property.IsProfessional ? "Profesional" : "Particular";
+
                 string htmlBody = $@"
-                    <div style='text-align: center; margin-bottom: 20px;'>
-                        <img src='cid:InmoAlertLogo' alt='InmoAlert Logo' style='max-width: 200px; height: auto;'/>
-                    </div>
-                    <h3>{property.Title}</h3>
-                    <p><strong>ID:</strong> {property.Id}</p>
-                    <p><strong>Ciudad:</strong> {property.Location}</p>
-                    <p><strong>Provincia:</strong> {property.Province}</p>
-                    <p><strong>Precio:</strong> {property.Price} {property.Currency}</p>
-                    <p><strong>Tipo de vendedor:</strong> {Utils.GetVendorType(property)}</p>
-                    <p><strong>Descripción:</strong> {property.Description}</p>
-                    <p><a href='{property.Url}'>Ver en Idealista</a></p>";
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                        <div style='text-align: center; margin-bottom: 20px; padding: 20px; background-color: #f8f9fa;'>
+                            <img src='cid:InmoAlertLogo' alt='InmoAlert Logo' style='max-width: 200px; height: auto;'/>
+                        </div>
+                        <div style='padding: 20px; background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 5px;'>
+                            <h2 style='color: #007bff; margin-top: 0;'>{property.Title}</h2>
+                            
+                            <div style='margin: 15px 0;'>
+                                <p style='margin: 5px 0;'><strong>📍 Ubicación:</strong> {property.Location}, {property.Province}</p>
+                                <p style='margin: 5px 0;'><strong>💰 Precio:</strong> <span style='color: #28a745; font-size: 1.3em; font-weight: bold;'>{property.Price:N0} {property.Currency}</span></p>
+                                <p style='margin: 5px 0;'><strong>🏢 Tipo de vendedor:</strong> {vendorType}</p>
+                                <p style='margin: 5px 0;'><strong>🆔 ID:</strong> {property.Id}</p>
+                            </div>
+                            
+                            <div style='margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #007bff;'>
+                                <p style='margin: 0;'><strong>📝 Descripción:</strong></p>
+                                <p style='margin: 10px 0 0 0;'>{property.Description}</p>
+                            </div>
+                            
+                            <div style='text-align: center; margin-top: 25px;'>
+                                <a href='{property.Url}' style='display: inline-block; padding: 12px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;'>
+                                    Ver en Idealista
+                                </a>
+                            </div>
+                        </div>
+                        <div style='text-align: center; margin-top: 20px; color: #6c757d; font-size: 0.9em;'>
+                            <p>InmoAlert - Alertas automáticas de propiedades</p>
+                        </div>
+                    </div>";
 
                 var htmlView = AlternateView.CreateAlternateViewFromString(htmlBody, null, MediaTypeNames.Text.Html);
 
                 var logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "inmoalert_logo.png");
-                var logo = new LinkedResource(logoPath, MediaTypeNames.Image.Jpeg)
+                if (File.Exists(logoPath))
                 {
-                    ContentId = "InmoAlertLogo"
-                };
-                htmlView.LinkedResources.Add(logo);
+                    var logo = new LinkedResource(logoPath, MediaTypeNames.Image.Png)
+                    {
+                        ContentId = "InmoAlertLogo"
+                    };
+                    htmlView.LinkedResources.Add(logo);
+                }
 
                 mailMessage.AlternateViews.Add(htmlView);
 
-                foreach (var email in emailList)
+                foreach (var email in _emailSettings.Recipients)
                 {
                     mailMessage.Bcc.Add(email);
                 }
 
                 await smtpClient.SendMailAsync(mailMessage);
-                Console.WriteLine($"Correo enviado para la propiedad ID: {property.Id} a {emailList.Count} destinatarios.");
+                Console.WriteLine($"✉ Email enviado para propiedad {property.Id} a {_emailSettings.Recipients.Count} destinatario(s)");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error al enviar el correo: {ex.Message}");
+                Console.WriteLine($"❌ Error al enviar email: {ex.Message}");
             }
         }
     }

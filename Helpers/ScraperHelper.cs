@@ -21,6 +21,8 @@ namespace Idealista.Helpers
         private static IPage? _mainPage;
         private static bool _browsersInstalled = false;
 
+        public static Action<Property>? OnNewPropertyFound { get; set; }
+
         static ScraperHelper()
         {
             var configuration = new ConfigurationBuilder()
@@ -276,6 +278,7 @@ namespace Idealista.Helpers
             {
                 DatabaseHelper.InsertProperty(property);
                 await EmailHelper.SendPropertyEmail(property);
+                OnNewPropertyFound?.Invoke(property);
             }
 
             return property;

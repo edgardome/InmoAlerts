@@ -10,6 +10,7 @@ namespace Idealista.Helpers
     public static class EmailHelper
     {
         private static readonly EmailSettings _emailSettings;
+        public static int EmailsSentSession { get; private set; } = 0;
 
         static EmailHelper()
         {
@@ -100,6 +101,7 @@ namespace Idealista.Helpers
                 }
 
                 await smtpClient.SendMailAsync(mailMessage);
+                EmailsSentSession++;
                 Console.WriteLine($"✉ Email enviado para propiedad {property.Id} a {_emailSettings.Recipients.Count} destinatario(s)");
             }
             catch (Exception ex)

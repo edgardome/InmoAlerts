@@ -39,7 +39,7 @@ namespace Idealista.Helpers
             if (!_browsersInstalled)
             {
                 Console.WriteLine("Instalando navegadores de Playwright (solo la primera vez)...");
-                var exitCode = Microsoft.Playwright.Program.Main(new[] { "install", "chromium" });
+                var exitCode = await Task.Run(() => Microsoft.Playwright.Program.Main(new[] { "install", "chromium" }));
                 if (exitCode != 0)
                 {
                     throw new Exception("Error al instalar los navegadores de Playwright");

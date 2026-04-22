@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexumLabs – Dashboard</title>
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Light mode (default) ── */
+:root {
+  --bg:       #f5f7fa;
+  --surface:  #ffffff;
+  --border:   #e1e4e8;
+  --text:     #1c2128;
+  --muted:    #6e7781;
+  --blue:     #0969da;
+  --green:    #1a7f37;
+  --red:      #cf222e;
+  --yellow:   #9a6700;
+  --orange:   #bc4c00;
+  --purple:   #8250df;
+  --radius:   10px;
+  --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+}
+
+/* ── Dark mode ── */
+html.dark {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --border:   #30363d;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --blue:     #58a6ff;
+  --green:    #3fb950;
+  --red:      #f85149;
+  --yellow:   #d29922;
+  --orange:   #e3b341;
+  --purple:   #bc8cff;
+  --shadow:   0 1px 3px rgba(0,0,0,.4);
+}
+
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; transition: background .2s, color .2s; }
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { cursor: pointer; border: none; outline: none; border-radius: 6px; font-size: 13px; font-weight: 600; padding: 7px 16px; transition: opacity .15s; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button:not(:disabled):hover { opacity: .85; }
+
+/* ── Layout ── */
+.navbar { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; height: 52px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); }
+.navbar-brand { font-size: 1rem; font-weight: 700; color: var(--blue); display: flex; align-items: center; gap: 8px; }
+.navbar-right { display: flex; align-items: center; gap: 12px; }
+.navbar-right .muted { color: var(--muted); font-size: .8rem; }
+
+/* ── Theme toggle ── */
+.btn-theme { background: transparent; border: none; padding: 4px 6px; font-size: 16px; color: var(--muted); border-radius: 6px; line-height: 1; transition: color .15s, background .15s; }
+.btn-theme:hover { background: var(--border); color: var(--text); }
+
+.main { padding: 20px; display: grid; gap: 16px; }
+
+/* ── Cards ── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.card-title { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+
+/* ── Status Row ── */
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.stat-label { font-size: .7rem; color: var(--muted); margin-bottom: 4px; }
+.stat-value { font-size: 1.1rem; font-weight: 700; }
+.stat-value.green { color: var(--green); }
+.stat-value.blue  { color: var(--blue); }
+.stat-value.red   { color: var(--red); }
+.stat-value.yellow{ color: var(--yellow); }
+
+/* ── Status indicator ── */
+.status-badge { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: .9rem; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.5s infinite; }
+.dot.stopped { background: var(--red); }
+@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+
+/* ── Buttons Row ── */
+.btn-start  { background: var(--green); color: #fff; }
+.btn-stop   { background: var(--red);   color: #fff; }
+.btn-secondary { background: var(--border); color: var(--text); }
+.btn-danger { background: #ffeef0; color: var(--red); border: 1px solid #ffc1c0; }
+html.dark .btn-danger { background: #3d1c1c; border-color: #6a2525; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-icon { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; font-size: 12px; }
+.btn-icon:not(:disabled):hover { border-color: var(--text); color: var(--text); }
+
+/* ── Controls row ── */
+.controls-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ── Last Lead ── */
+.last-lead { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+.last-lead-info .prop-title { font-size: 1rem; font-weight: 700; color: var(--blue); margin-bottom: 4px; }
+.last-lead-info .prop-meta  { color: var(--muted); font-size: .8rem; margin-bottom: 2px; }
+.last-lead-info .prop-price { font-size: 1.2rem; font-weight: 700; color: var(--green); }
+.last-lead-empty { color: var(--muted); font-style: italic; }
+.vendor-badge { font-size: .7rem; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+.vendor-particular { background: #dafbe1; color: #1a7f37; border: 1px solid #aceebb; }
+.vendor-profesional { background: #ddf4ff; color: #0969da; border: 1px solid #aadcf9; }
+.vendor-banco       { background: #fff3cd; color: #9a6700; border: 1px solid #f5c518; }
+html.dark .vendor-particular { background: #122d1f; color: #3fb950; border-color: #1a4d2e; }
+html.dark .vendor-profesional{ background: #1a2a40; color: #58a6ff; border-color: #1f3d6e; }
+html.dark .vendor-banco      { background: #2d1a1a; color: #e3b341; border-color: #5c3030; }
+
+/* ── Two column layout ── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ── Log ── */
+.log-wrap { background: #1c2128; border: 1px solid var(--border); border-radius: 8px; height: 320px; overflow-y: auto; padding: 10px 12px; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px; color: #3fb950; }
+html:not(.dark) .log-wrap { background: #1c2128; }
+.log-wrap .log-line { border-bottom: 1px solid rgba(255,255,255,.05); padding: 2px 0; white-space: pre-wrap; word-break: break-all; }
+.log-wrap .log-line:last-child { border: none; }
+.log-ts { color: #8b949e; margin-right: 6px; }
+
+/* ── Locations ── */
+.loc-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
+.loc-item { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; }
+.loc-item.active { border-color: var(--blue); background: #ddf4ff; }
+html.dark .loc-item.active { background: #0d1f35; }
+.loc-name { font-weight: 600; font-size: .85rem; }
+.loc-url  { font-size: .7rem; color: var(--muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loc-add-form { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.loc-add-form input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 12px; outline: none; flex: 1; min-width: 100px; }
+.loc-add-form input:focus { border-color: var(--blue); }
+
+/* ── Properties Table ── */
+.table-wrap { overflow-x: auto; }
+.props-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.props-table th { background: var(--bg); color: var(--muted); text-transform: uppercase; font-size: .65rem; letter-spacing: .06em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+.props-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.props-table tr:hover td { background: var(--bg); }
+.price-cell { font-weight: 700; color: var(--green); white-space: nowrap; }
+.id-cell { font-family: monospace; color: var(--muted); font-size: 11px; }
+.desc-cell { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+
+/* ── Pagination ── */
+.pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; flex-wrap: wrap; gap: 8px; }
+.pagination .info { color: var(--muted); font-size: .8rem; }
+.page-btns { display: flex; gap: 6px; }
+
+/* ── Search row ── */
+.search-row { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+.search-row input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 12px; font-size: 13px; outline: none; flex: 1; min-width: 160px; }
+.search-row input:focus { border-color: var(--blue); }
+
+/* ── Tabs ── */
+.tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; gap: 2px; }
+.tab { padding: 8px 16px; font-size: .85rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; }
+.tab.active { color: var(--blue); border-color: var(--blue); font-weight: 600; }
+.tab:hover:not(.active) { color: var(--text); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Toast ── */
+.toast-wrap { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
+.toast { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: .85rem; min-width: 200px; box-shadow: var(--shadow); animation: slideIn .2s ease; }
+.toast.ok   { border-color: var(--green); color: var(--green); }
+.toast.err  { border-color: var(--red); color: var(--red); }
+@keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="navbar-brand"><img src="/logo.png" alt="Logo" style="height:32px;object-fit:contain;"> NexumLabs</div>
+  <div class="navbar-right">
+    <span class="muted" id="nav-scanning">📍 En espera</span>
+    <button class="btn-theme" id="btn-theme" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
+    <form method="post" action="/logout" style="margin:0">
+      <button type="submit" class="btn-icon">Cerrar sesión</button>
+    </form>
+  </div>
+</nav>
+
+<div class="main">
+
+  <!-- Controls + Stats -->
+  <div class="card">
+    <div class="card-title">Estado del Sistema</div>
+    <div class="controls-row" style="margin-bottom:14px">
+      <button class="btn-start" id="btn-start" onclick="startScraping()">▶ Iniciar</button>
+      <button class="btn-stop"  id="btn-stop"  onclick="stopScraping()" disabled>⏸ Detener</button>
+      <span class="status-badge" id="status-badge">
+        <span class="dot stopped" id="status-dot"></span>        <span id="status-text">DETENIDO</span>
+      </span>
+    </div>
+    <div class="status-grid">
+      <div class="stat-box">
+        <div class="stat-label">Base de Datos</div>
+        <div class="stat-value blue" id="stat-db">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Ciclos</div>
+        <div class="stat-value" id="stat-cycles">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Leads (sesión)</div>
+        <div class="stat-value green" id="stat-leads">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Emails enviados</div>
+        <div class="stat-value" id="stat-emails">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Último ciclo</div>
+        <div class="stat-value" style="font-size:.85rem" id="stat-lastrun">Nunca</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Próximo ciclo</div>
+        <div class="stat-value yellow" id="stat-countdown">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Last Lead -->
+  <div class="card">
+    <div class="card-title">Último Lead Encontrado</div>
+    <div id="last-lead-empty" class="last-lead-empty">Sin datos aún...</div>
+    <div id="last-lead-data" class="last-lead" style="display:none">
+      <div class="last-lead-info">
+        <div class="prop-title" id="ll-title"></div>
+        <div class="prop-meta" id="ll-location"></div>
+        <div class="prop-meta" id="ll-vendor"></div>
+        <div class="prop-meta" style="margin-top:4px" id="ll-desc"></div>
+      </div>
+      <div style="text-align:right">
+        <div class="prop-price" id="ll-price"></div>
+        <a id="ll-url" href="#" target="_blank" style="font-size:.75rem;display:block;margin-top:6px">Ver en Idealista →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs: Log + Locations / Properties -->
+  <div class="card">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('tab-monitor', this)">📊 Monitor</div>
+      <div class="tab"        onclick="switchTab('tab-locations', this)">📍 Ubicaciones</div>
+      <div class="tab"        onclick="switchTab('tab-props', this)">🏠 Propiedades</div>
+    </div>
+
+    <!-- Monitor tab -->
+    <div class="tab-panel active" id="tab-monitor">
+      <div class="two-col">
+        <!-- Log -->
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-weight:600;font-size:.8rem">Log de Actividad</span>
+            <button class="btn-icon btn-sm" onclick="clearLog()">🗑 Limpiar</button>
+          </div>
+          <div class="log-wrap" id="log-view"></div>
+        </div>
+        <!-- Stats mini panel -->
+        <div>
+          <div style="font-weight:600;font-size:.8rem;margin-bottom:8px">Conexión SSE</div>
+          <div class="stat-box" style="margin-bottom:8px">
+            <div class="stat-label">Estado stream</div>
+            <div class="stat-value" id="sse-status" style="font-size:.85rem;color:var(--muted)">Conectando...</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Líneas recibidas</div>
+            <div class="stat-value" id="log-count">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Locations tab -->
+    <div class="tab-panel" id="tab-locations">
+      <div id="loc-list" class="loc-list"></div>
+      <div class="loc-add-form">
+        <input type="text" id="loc-name" placeholder="Nombre (ej: Madrid)" />
+        <input type="url"  id="loc-url"  placeholder="URL de búsqueda de Idealista" style="flex:2" />
+        <button class="btn-start btn-sm" onclick="addLocation()">+ Añadir</button>
+      </div>
+    </div>
+
+    <!-- Properties tab -->
+    <div class="tab-panel" id="tab-props">
+      <div class="search-row">
+        <input type="text" id="prop-search" placeholder="Buscar por título, ubicación..." oninput="debounceSearch()" />
+        <button class="btn-secondary btn-sm" onclick="loadProperties(1)">🔍 Buscar</button>
+        <span class="info" id="prop-total" style="color:var(--muted);font-size:.8rem"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="props-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Título</th>
+              <th>Ubicación</th>
+              <th>Precio</th>
+              <th>Vendedor</th>
+              <th>Descripción</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="props-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <span class="info" id="page-info"></span>
+        <div class="page-btns">
+          <button class="btn-secondary btn-sm" id="btn-prev" onclick="changePage(-1)" disabled>‹ Anterior</button>
+          <button class="btn-secondary btn-sm" id="btn-next" onclick="changePage(1)"  disabled>Siguiente ›</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let currentPage = 1;
+const pageSize  = 50;
+let logCount    = 0;
+let sseSource   = null;
+let statusInterval = null;
+let searchTimeout  = null;
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  // Apply saved theme before first paint
+  const saved = localStorage.getItem('theme');
+  if (saved === 'dark') {
+    document.documentElement.classList.add('dark');
+    document.getElementById('btn-theme').textContent = '☀️';
+  }
+  connectSSE();
+  pollStatus();
+  statusInterval = setInterval(pollStatus, 5000);
+  loadLocations();
+});
+
+// ── Theme toggle ─────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  document.getElementById('btn-theme').textContent = isDark ? '☀️' : '🌙';
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+}
+
+// ── SSE ──────────────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource('/api/logs/stream');
+
+  sseSource.onopen = () => {
+    document.getElementById('sse-status').textContent = '🟢 Conectado';
+    document.getElementById('sse-status').style.color = 'var(--green)';
+  };
+
+  sseSource.onmessage = (e) => {
+    const msg = e.data.trim();
+    if (!msg) return;
+    appendLog(msg);
+  };
+
+  sseSource.onerror = () => {
+    document.getElementById('sse-status').textContent = '🔴 Desconectado – reconectando...';
+    document.getElementById('sse-status').style.color = 'var(--red)';
+    sseSource.close();
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+function appendLog(line) {
+  const view = document.getElementById('log-view');
+  const el = document.createElement('div');
+  el.className = 'log-line';
+  el.textContent = line;
+  view.appendChild(el);
+  view.scrollTop = view.scrollHeight;
+  logCount++;
+  document.getElementById('log-count').textContent = logCount;
+  // Keep last 500 lines
+  while (view.children.length > 500) view.removeChild(view.firstChild);
+}
+
+function clearLog() {
+  document.getElementById('log-view').innerHTML = '';
+  logCount = 0;
+  document.getElementById('log-count').textContent = 0;
+}
+
+// ── Status polling ────────────────────────────────────────────────────────────
+async function pollStatus() {
+  try {
+    const r = await fetch('/api/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    updateStatusUI(s);
+  } catch {}
+}
+
+function updateStatusUI(s) {
+  const running = s.isRunning;
+
+  document.getElementById('status-dot').className  = 'dot ' + (running ? 'running' : 'stopped');
+  document.getElementById('status-text').textContent = running ? 'EJECUTANDO' : 'DETENIDO';
+  document.getElementById('btn-start').disabled = running;
+  document.getElementById('btn-stop').disabled  = !running;
+
+  document.getElementById('stat-db').textContent      = s.propertyCount?.toLocaleString('es') ?? '—';
+  document.getElementById('stat-cycles').textContent  = s.cycleCount ?? 0;
+  document.getElementById('stat-leads').textContent   = s.newLeads ?? 0;
+  document.getElementById('stat-emails').textContent  = s.emailsSent ?? 0;
+  document.getElementById('stat-lastrun').textContent = s.lastRunTime ?? 'Nunca';
+  document.getElementById('stat-countdown').textContent = s.countdown ? s.countdown : (running ? '...' : '—');
+  document.getElementById('nav-scanning').textContent = '📍 ' + (s.currentLocation ?? 'En espera');
+
+  if (s.lastProperty) {
+    const p = s.lastProperty;
+    document.getElementById('last-lead-empty').style.display = 'none';
+    document.getElementById('last-lead-data').style.display  = 'grid';
+    document.getElementById('ll-title').textContent    = '🏠 ' + p.title;
+    document.getElementById('ll-location').textContent = '📍 ' + p.location + ', ' + p.province;
+    const vtype = p.isBank ? 'banco' : p.isProfessional ? 'profesional' : 'particular';
+    const vtext = p.isBank ? '🏦 Banco' : p.isProfessional ? '💼 Profesional' : '👤 Particular';
+    document.getElementById('ll-vendor').innerHTML = `<span class="vendor-badge vendor-${vtype}">${vtext}</span> <span style="color:var(--muted);font-size:.75rem">ID: ${p.id}</span>`;
+    const desc = p.description?.length > 120 ? p.description.slice(0, 117) + '…' : p.description;
+    document.getElementById('ll-desc').textContent = '📝 ' + (desc || '');
+    document.getElementById('ll-price').textContent = (p.price?.toLocaleString('es') ?? '—') + ' ' + (p.currency ?? '€');
+    const urlEl = document.getElementById('ll-url');
+    urlEl.href = p.url;
+    urlEl.style.display = p.url ? '' : 'none';
+  }
+}
+
+// ── Scraper control ───────────────────────────────────────────────────────────
+async function startScraping() {
+  document.getElementById('btn-start').disabled = true;
+  try {
+    const r = await fetch('/api/start', { method: 'POST' });
+    const j = await r.json();
+    if (r.ok) { toast('Scraping iniciado ▶', 'ok'); pollStatus(); }
+    else       { toast(j.error || 'Error', 'err'); document.getElementById('btn-start').disabled = false; }
+  } catch { toast('Error de conexión', 'err'); document.getElementById('btn-start').disabled = false; }
+}
+
+async function stopScraping() {
+  document.getElementById('btn-stop').disabled = true;
+  try {
+    await fetch('/api/stop', { method: 'POST' });
+    toast('Scraping detenido ⏸', 'ok');
+    pollStatus();
+  } catch { toast('Error de conexión', 'err'); }
+}
+
+// ── Locations ─────────────────────────────────────────────────────────────────
+async function loadLocations() {
+  try {
+    const r = await fetch('/api/locations');
+    const locs = await r.json();
+    renderLocations(locs);
+  } catch {}
+}
+
+function renderLocations(locs) {
+  const el = document.getElementById('loc-list');
+  if (!locs || locs.length === 0) {
+    el.innerHTML = '<div style="color:var(--muted);font-style:italic;padding:8px">No hay ubicaciones configuradas</div>';
+    return;
+  }
+  el.innerHTML = locs.map((l, i) => `
+    <div class="loc-item" id="loc-${i}">
+      <div>
+        <div class="loc-name">${esc(l.name)}</div>
+        <div class="loc-url" title="${esc(l.url)}">${esc(l.url)}</div>
+      </div>
+      <button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteLocation(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+async function addLocation() {
+  const name = document.getElementById('loc-name').value.trim();
+  const url  = document.getElementById('loc-url').value.trim();
+  if (!name || !url) { toast('Nombre y URL son obligatorios', 'err'); return; }
+  try {
+    const r = await fetch('/api/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, url })
+    });
+    if (r.ok) {
+      const locs = await r.json();
+      renderLocations(locs);
+      document.getElementById('loc-name').value = '';
+      document.getElementById('loc-url').value  = '';
+      toast('Ubicación añadida ✓', 'ok');
+    } else {
+      const j = await r.json();
+      toast(j.error || 'Error', 'err');
+    }
+  } catch { toast('Error de conexión', 'err'); }
+}
+
+async function deleteLocation(index) {
+  try {
+    const r = await fetch(`/api/locations/${index}`, { method: 'DELETE' });
+    if (r.ok) {
+      const locs = await r.json();
+      renderLocations(locs);
+      toast('Ubicación eliminada', 'ok');
+    }
+  } catch { toast('Error de conexión', 'err'); }
+}
+
+// ── Properties ────────────────────────────────────────────────────────────────
+async function loadProperties(page = 1) {
+  currentPage = page;
+  const search = document.getElementById('prop-search')?.value.trim() || '';
+  const url = `/api/properties?page=${page}&pageSize=${pageSize}` + (search ? `&search=${encodeURIComponent(search)}` : '');
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    renderProperties(d);
+  } catch {}
+}
+
+function renderProperties(d) {
+  const tbody = document.getElementById('props-tbody');
+  const items = d.items || [];
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Sin resultados</td></tr>';
+  } else {
+    tbody.innerHTML = items.map(p => {
+      const vtype = p.isBank ? 'banco' : p.isProfessional ? 'profesional' : 'particular';
+      const vtext = p.isBank ? '🏦 Banco' : p.isProfessional ? '💼 Prof.' : '👤 Part.';
+      const desc  = p.description?.length > 60 ? p.description.slice(0, 57) + '…' : (p.description || '');
+      return `<tr>
+        <td class="id-cell">${esc(p.id)}</td>
+        <td><a href="${esc(p.url)}" target="_blank" title="${esc(p.title)}">${esc(p.title?.slice(0,50) || '')}</a></td>
+        <td>${esc(p.location)}, ${esc(p.province)}</td>
+        <td class="price-cell">${(p.price||0).toLocaleString('es')} ${esc(p.currency||'€')}</td>
+        <td><span class="vendor-badge vendor-${vtype}">${vtext}</span></td>
+        <td class="desc-cell" title="${esc(p.description||'')}">${esc(desc)}</td>
+        <td><a href="${esc(p.url)}" target="_blank" class="btn-icon btn-sm">↗</a></td>
+      </tr>`;
+    }).join('');
+  }
+
+  const total    = d.total || 0;
+  const from     = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const to       = Math.min(currentPage * pageSize, total);
+  const maxPages = Math.ceil(total / pageSize);
+
+  document.getElementById('prop-total').textContent = `${total.toLocaleString('es')} propiedades`;
+  document.getElementById('page-info').textContent  = total > 0 ? `${from}–${to} de ${total.toLocaleString('es')}` : '';
+  document.getElementById('btn-prev').disabled = currentPage <= 1;
+  document.getElementById('btn-next').disabled = currentPage >= maxPages;
+}
+
+function changePage(delta) {
+  loadProperties(currentPage + delta);
+}
+
+function debounceSearch() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => loadProperties(1), 400);
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+function switchTab(id, el) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+  if (id === 'tab-props') loadProperties(1);
+  if (id === 'tab-locations') loadLocations();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const wrap = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

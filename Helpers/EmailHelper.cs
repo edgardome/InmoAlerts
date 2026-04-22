@@ -53,7 +53,7 @@ namespace Idealista.Helpers
                 string htmlBody = $@"
                     <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
                         <div style='text-align: center; margin-bottom: 20px; padding: 20px; background-color: #f8f9fa;'>
-                            <img src='cid:InmoAlertLogo' alt='InmoAlert Logo' style='max-width: 200px; height: auto;'/>
+                            <img src='cid:NexumLabsLogo' alt='NexumLabs Logo' style='max-width: 200px; height: auto;'/>
                         </div>
                         <div style='padding: 20px; background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 5px;'>
                             <h2 style='color: #007bff; margin-top: 0;'>{property.Title}</h2>
@@ -77,18 +77,18 @@ namespace Idealista.Helpers
                             </div>
                         </div>
                         <div style='text-align: center; margin-top: 20px; color: #6c757d; font-size: 0.9em;'>
-                            <p>InmoAlert - Alertas automáticas de propiedades</p>
+                            <p>NexumLabs - Alertas automáticas de propiedades</p>
                         </div>
                     </div>";
 
                 var htmlView = AlternateView.CreateAlternateViewFromString(htmlBody, null, MediaTypeNames.Text.Html);
 
-                var logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "inmoalert_logo.png");
+                var logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "logo.png");
                 if (File.Exists(logoPath))
                 {
                     var logo = new LinkedResource(logoPath, MediaTypeNames.Image.Png)
                     {
-                        ContentId = "InmoAlertLogo"
+                        ContentId = "NexumLabsLogo"
                     };
                     htmlView.LinkedResources.Add(logo);
                 }

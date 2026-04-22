@@ -1,573 +1,251 @@
-using Terminal.Gui;
+using Idealista.Configuration;
 using Idealista.Helpers;
 using Idealista.Models;
+using Idealista.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using System.Security.Claims;
 
-class Program
+var builder = WebApplication.CreateBuilder(args);
+
+// ── Configuration ────────────────────────────────────────────────────────────
+builder.Services.Configure<ScraperSettings>(builder.Configuration.GetSection("ScraperSettings"));
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.Configure<DashboardSettings>(builder.Configuration.GetSection("DashboardSettings"));
+
+// ── Services ─────────────────────────────────────────────────────────────────
+builder.Services.AddSingleton<ScraperState>();
+builder.Services.AddSingleton<LogService>();
+builder.Services.AddSingleton<ScraperBackgroundService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ScraperBackgroundService>());
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.Cookie.Name = "nexumlabs_session";
+        options.Cookie.HttpOnly = true;
+        options.ExpireTimeSpan = TimeSpan.FromDays(7);
+        options.SlidingExpiration = true;
+    });
+builder.Services.AddAuthorization();
+
+var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseStaticFiles();
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+app.MapGet("/login", () => Results.Content(LoginHtml(), "text/html")).AllowAnonymous();
+
+app.MapPost("/login", async (HttpContext ctx, IOptions<DashboardSettings> dashOpts) =>
 {
-    // ── UI references ────────────────────────────────────────────────────────
-    private static TextView?  _logView;
-    private static Label?     _statusLabel;
-    private static Label?     _countLabel;
-    private static Label?     _lastRunLabel;
-    private static Label?     _countdownLabel;
-    private static Label?     _cycleCountLabel;
-    private static Label?     _leadsLabel;
-    private static Label?     _emailsLabel;
-    private static Label?     _scanningLabel;
-    private static ListView?  _locationsList;
-    private static Label?     _lastPropTitle;
-    private static Label?     _lastPropLocation;
-    private static Label?     _lastPropPrice;
-    private static Label?     _lastPropVendor;
-    private static Label?     _lastPropDesc;
-    private static Button?    _startButton;
-    private static Button?    _stopButton;
+    var form = await ctx.Request.ReadFormAsync();
+    var user = form["username"].ToString();
+    var pass = form["password"].ToString();
+    var settings = dashOpts.Value;
 
-    // ── State ────────────────────────────────────────────────────────────────
-    private static bool                      _isRunning  = false;
-    private static CancellationTokenSource?  _cts;
-    private static int                       _cycleCount      = 0;
-    private static int                       _newLeadsSession = 0;
-    private static DateTime?                 _nextCycleTime   = null;
-    private static System.Threading.Timer?   _countdownTimer  = null;
-
-    // ── Color schemes ────────────────────────────────────────────────────────
-    private static ColorScheme _schemeMain   = new();
-    private static ColorScheme _schemeFrame  = new();
-    private static ColorScheme _schemeAccent = new();
-    private static ColorScheme _schemeLog    = new();
-
-    // ─────────────────────────────────────────────────────────────────────────
-    static void Main(string[] args)
+    if (user == settings.Username && pass == settings.Password)
     {
-        Application.Init();
-
-        // Build color schemes (must be after Application.Init)
-        _schemeMain = new ColorScheme
-        {
-            Normal    = new Terminal.Gui.Attribute(Color.White,       Color.Black),
-            Focus     = new Terminal.Gui.Attribute(Color.BrightCyan,  Color.Black),
-            HotNormal = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            HotFocus  = new Terminal.Gui.Attribute(Color.BrightYellow,Color.Black),
-            Disabled  = new Terminal.Gui.Attribute(Color.Gray,        Color.Black),
-        };
-        _schemeFrame = new ColorScheme
-        {
-            Normal    = new Terminal.Gui.Attribute(Color.BrightCyan,  Color.Black),
-            Focus     = new Terminal.Gui.Attribute(Color.BrightCyan,  Color.Black),
-            HotNormal = new Terminal.Gui.Attribute(Color.BrightCyan,  Color.Black),
-            HotFocus  = new Terminal.Gui.Attribute(Color.BrightCyan,  Color.Black),
-            Disabled  = new Terminal.Gui.Attribute(Color.Gray,        Color.Black),
-        };
-        _schemeAccent = new ColorScheme
-        {
-            Normal    = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            Focus     = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            HotNormal = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            HotFocus  = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            Disabled  = new Terminal.Gui.Attribute(Color.Gray,        Color.Black),
-        };
-        _schemeLog = new ColorScheme
-        {
-            Normal    = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            Focus     = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            HotNormal = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            HotFocus  = new Terminal.Gui.Attribute(Color.BrightGreen, Color.Black),
-            Disabled  = new Terminal.Gui.Attribute(Color.Gray,        Color.Black),
-        };
-
-        var top = Application.Top;
-        top.ColorScheme = _schemeMain;
-
-        var window = new Window("  ◈  InmoAlert  ·  Idealista Property Scraper v1.0  ◈  ")
-        {
-            X = 0, Y = 0,
-            Width = Dim.Fill(), Height = Dim.Fill(),
-            ColorScheme = _schemeMain,
-        };
-
-        // ── STATUS FRAME ─────────────────────────────────────────────────────
-        var statusFrame = new FrameView("  Sistema  ")
-        {
-            X = 1, Y = 1,
-            Width = Dim.Fill() - 1, Height = 5,
-            ColorScheme = _schemeFrame,
-        };
-
-        // Row 0: status | BD | cycles | leads | emails
-        _statusLabel = new Label("🔴 DETENIDO")
-        { X = 1, Y = 0, Width = 18, ColorScheme = _schemeMain };
-
-        var sep1a = new Label("│") { X = 20, Y = 0, Width = 1 };
-
-        _countLabel = new Label("📊 BD: 0")
-        { X = 22, Y = 0, Width = 14, ColorScheme = _schemeMain };
-
-        var sep1b = new Label("│") { X = 37, Y = 0, Width = 1 };
-
-        _cycleCountLabel = new Label("🔄 Ciclos: 0")
-        { X = 39, Y = 0, Width = 16, ColorScheme = _schemeMain };
-
-        var sep1c = new Label("│") { X = 56, Y = 0, Width = 1 };
-
-        _leadsLabel = new Label("🏠 Leads: 0")
-        { X = 58, Y = 0, Width = 16, ColorScheme = _schemeAccent };
-
-        var sep1d = new Label("│") { X = 75, Y = 0, Width = 1 };
-
-        _emailsLabel = new Label("✉  Emails: 0")
-        { X = 77, Y = 0, Width = 18, ColorScheme = _schemeAccent };
-
-        // Row 1: last run | countdown | scanning
-        _lastRunLabel = new Label("⏰ Último ciclo: Nunca")
-        { X = 1, Y = 1, Width = 32, ColorScheme = _schemeMain };
-
-        var sep2a = new Label("│") { X = 34, Y = 1, Width = 1 };
-
-        _countdownLabel = new Label("⏳ Próximo en: --:--")
-        { X = 36, Y = 1, Width = 26, ColorScheme = _schemeMain };
-
-        var sep2b = new Label("│") { X = 63, Y = 1, Width = 1 };
-
-        _scanningLabel = new Label("📍 En espera")
-        { X = 65, Y = 1, Width = Dim.Fill() - 2, ColorScheme = _schemeMain };
-
-        statusFrame.Add(
-            _statusLabel, sep1a, _countLabel, sep1b, _cycleCountLabel,
-            sep1c, _leadsLabel, sep1d, _emailsLabel,
-            _lastRunLabel, sep2a, _countdownLabel, sep2b, _scanningLabel
-        );
-
-        // ── LAST LEAD FRAME ───────────────────────────────────────────────────
-        var lastLeadFrame = new FrameView("  Último Lead Encontrado  ")
-        {
-            X = 1, Y = 7,
-            Width = Dim.Fill() - 1, Height = 7,
-            ColorScheme = _schemeFrame,
-        };
-
-        _lastPropTitle = new Label("─  Sin datos aún  ─")
-        { X = 1, Y = 0, Width = Dim.Fill() - 2, ColorScheme = _schemeAccent };
-
-        _lastPropLocation = new Label("")
-        { X = 1, Y = 1, Width = Dim.Fill() - 2, ColorScheme = _schemeMain };
-
-        _lastPropPrice = new Label("")
-        { X = 1, Y = 2, Width = 40, ColorScheme = _schemeMain };
-
-        _lastPropVendor = new Label("")
-        { X = 1, Y = 3, Width = Dim.Fill() - 2, ColorScheme = _schemeMain };
-
-        _lastPropDesc = new Label("")
-        { X = 1, Y = 4, Width = Dim.Fill() - 2, ColorScheme = _schemeMain };
-
-        lastLeadFrame.Add(
-            _lastPropTitle, _lastPropLocation,
-            _lastPropPrice, _lastPropVendor, _lastPropDesc
-        );
-
-        // ── LOCATIONS FRAME ──────────────────────────────────────────────────
-        var locationsFrame = new FrameView("  Ubicaciones  ")
-        {
-            X = 1, Y = 15,
-            Width = 28, Height = Dim.Fill() - 18,
-            ColorScheme = _schemeFrame,
-        };
-
-        _locationsList = new ListView()
-        {
-            X = 0, Y = 0,
-            Width = Dim.Fill(), Height = Dim.Fill(),
-            ColorScheme = _schemeMain,
-        };
-        locationsFrame.Add(_locationsList);
-
-        // ── LOG FRAME ────────────────────────────────────────────────────────
-        var logFrame = new FrameView("  Log de Actividad  ")
-        {
-            X = 30, Y = 15,
-            Width = Dim.Fill() - 1, Height = Dim.Fill() - 18,
-            ColorScheme = _schemeFrame,
-        };
-
-        _logView = new TextView()
-        {
-            X = 0, Y = 0,
-            Width = Dim.Fill(), Height = Dim.Fill(),
-            ReadOnly = true, WordWrap = true,
-            ColorScheme = _schemeLog,
-        };
-        logFrame.Add(_logView);
-
-        // ── BUTTONS ──────────────────────────────────────────────────────────
-        _startButton = new Button("▶  Iniciar Scraping")
-        {
-            X = 2,
-            Y = Pos.Bottom(window) - 3,
-            ColorScheme = _schemeAccent,
-        };
-
-        _stopButton = new Button("⏸  Detener")
-        {
-            X = Pos.Right(_startButton) + 2,
-            Y = Pos.Bottom(window) - 3,
-            Enabled = false,
-        };
-
-        var clearLogButton = new Button("🗑  Limpiar Log")
-        {
-            X = Pos.Right(_stopButton) + 2,
-            Y = Pos.Bottom(window) - 3,
-        };
-
-        var exitButton = new Button("✖  Salir")
-        {
-            X = Pos.Right(clearLogButton) + 2,
-            Y = Pos.Bottom(window) - 3,
-        };
-
-        // ── BUTTON EVENTS ────────────────────────────────────────────────────
-        _startButton.Clicked += async () =>
-        {
-            if (!_isRunning)
-            {
-                _isRunning = true;
-                _startButton.Enabled = false;
-                _stopButton.Enabled = true;
-                _cts = new CancellationTokenSource();
-                _ = Task.Run(async () => await StartScrapingAsync(_cts.Token));
-            }
-        };
-
-        _stopButton.Clicked += () =>
-        {
-            _isRunning = false;
-            _cts?.Cancel();
-            _startButton!.Enabled = true;
-            _stopButton.Enabled = false;
-            _nextCycleTime = null;
-            UpdateStatus("🔴 DETENIDO");
-            UpdateScanning("📍 En espera");
-            Log("⏹ Scraping detenido manualmente");
-        };
-
-        clearLogButton.Clicked += () =>
-        {
-            Application.MainLoop.Invoke(() =>
-            {
-                if (_logView != null) _logView.Text = "";
-            });
-            Log("🗑 Log limpiado");
-        };
-
-        exitButton.Clicked += () =>
-        {
-            if (_isRunning)
-            {
-                var result = MessageBox.Query("Confirmar salida",
-                    "El scraping está en ejecución.\n¿Desea salir?", "Sí", "No");
-                if (result == 0)
-                {
-                    _cts?.Cancel();
-                    _countdownTimer?.Dispose();
-                    Application.RequestStop();
-                }
-            }
-            else
-            {
-                _countdownTimer?.Dispose();
-                Application.RequestStop();
-            }
-        };
-
-        window.Add(
-            statusFrame, lastLeadFrame,
-            locationsFrame, logFrame,
-            _startButton, _stopButton, clearLogButton, exitButton
-        );
-        top.Add(window);
-
-        // Register callback for new properties
-        ScraperHelper.OnNewPropertyFound = OnNewPropertyFound;
-
-        // Countdown timer – fires every second
-        _countdownTimer = new System.Threading.Timer(
-            _ => UpdateCountdown(), null, 0, 1000);
-
-        InitializeSystem();
-
-        Application.Run();
-        Application.Shutdown();
-
-        _countdownTimer?.Dispose();
-        ScraperHelper.DisposeAsync().GetAwaiter().GetResult();
+        var claims = new[] { new Claim(ClaimTypes.Name, user) };
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+        return Results.Redirect("/");
     }
 
-    // ── Callback ─────────────────────────────────────────────────────────────
-    static void OnNewPropertyFound(Property property)
-    {
-        _newLeadsSession++;
+    return Results.Content(LoginHtml("Usuario o contraseña incorrectos"), "text/html");
+}).AllowAnonymous();
 
-        Application.MainLoop.Invoke(() =>
-        {
-            if (_leadsLabel  != null) _leadsLabel.Text  = $"🏠 Leads: {_newLeadsSession}";
-            if (_emailsLabel != null) _emailsLabel.Text = $"✉  Emails: {EmailHelper.EmailsSentSession}";
-
-            if (_lastPropTitle    != null)
-                _lastPropTitle.Text    = $"🏠  {property.Title}";
-            if (_lastPropLocation != null)
-                _lastPropLocation.Text = $"📍  {property.Location}, {property.Province}";
-            if (_lastPropPrice    != null)
-                _lastPropPrice.Text    = $"💰  {property.Price:N0} {property.Currency}";
-            if (_lastPropVendor   != null)
-            {
-                var type = property.IsBank ? "Banco" : property.IsProfessional ? "Profesional" : "Particular";
-                _lastPropVendor.Text = $"👤  {type}   |   🆔  {property.Id}   |   🔗  {property.Url}";
-            }
-            if (_lastPropDesc != null)
-            {
-                var desc = property.Description.Length > 100
-                    ? property.Description[..97] + "..."
-                    : property.Description;
-                _lastPropDesc.Text = $"📝  {desc}";
-            }
-        });
-
-        Log($"✉ Email enviado → {property.Title} · {property.Price:N0}€");
-    }
-
-    // ── Countdown update (called from Timer thread) ───────────────────────────
-    static void UpdateCountdown()
-    {
-        if (_nextCycleTime.HasValue && _isRunning)
-        {
-            var remaining = _nextCycleTime.Value - DateTime.Now;
-            var text = remaining.TotalSeconds > 0
-                ? $"⏳ Próximo en: {(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2}"
-                : "⏳ Iniciando ciclo...";
-            Application.MainLoop?.Invoke(() =>
-            {
-                if (_countdownLabel != null) _countdownLabel.Text = text;
-            });
-        }
-        else if (!_isRunning)
-        {
-            Application.MainLoop?.Invoke(() =>
-            {
-                if (_countdownLabel != null) _countdownLabel.Text = "⏳ Próximo en: --:--";
-            });
-        }
-    }
-
-    // ── System init ──────────────────────────────────────────────────────────
-    static void InitializeSystem()
-    {
-        try
-        {
-            Log("🚀 Iniciando sistema InmoAlert...");
-            DatabaseHelper.InitializeDatabase();
-            Log("✓ Base de datos inicializada");
-
-            string jsonPath = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
-            string jsonContent = File.ReadAllText(jsonPath);
-            var locationData = JsonConvert.DeserializeObject<LocationData>(jsonContent);
-
-            if (locationData?.Locations != null && locationData.Locations.Count > 0)
-            {
-                var names = locationData.Locations.Select(l => l.Name).ToList();
-                Application.MainLoop.Invoke(() =>
-                {
-                    if (_locationsList != null) _locationsList.SetSource(names);
-                });
-                Log($"✓ {locationData.Locations.Count} ubicación(es) cargada(s)");
-            }
-            else
-            {
-                Log("⚠ No se encontraron ubicaciones en locations.json");
-            }
-
-            UpdateCount();
-            Log("✓ Sistema listo  –  Presione ▶ Iniciar Scraping para comenzar");
-        }
-        catch (Exception ex)
-        {
-            Log($"❌ Error en inicialización: {ex.Message}");
-        }
-    }
-
-    // ── Main scraping loop ───────────────────────────────────────────────────
-    static async Task StartScrapingAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            UpdateStatus("🟢 EJECUTANDO");
-            Log("▶ Iniciando ciclo de scraping...");
-
-            string jsonPath = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
-            string jsonContent = File.ReadAllText(jsonPath);
-            var locationData = JsonConvert.DeserializeObject<LocationData>(jsonContent);
-
-            if (locationData?.Locations == null || locationData.Locations.Count == 0)
-            {
-                Log("❌ No hay ubicaciones configuradas");
-                return;
-            }
-
-            while (_isRunning && !cancellationToken.IsCancellationRequested)
-            {
-                _cycleCount++;
-                Application.MainLoop.Invoke(() =>
-                {
-                    if (_cycleCountLabel != null)
-                        _cycleCountLabel.Text = $"🔄 Ciclos: {_cycleCount}";
-                });
-
-                Log($"\n{'═',60}");
-                Log($"🔄 Ciclo #{_cycleCount}  —  {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
-                Log($"{'═',60}\n");
-
-                foreach (var location in locationData.Locations)
-                {
-                    if (!_isRunning || cancellationToken.IsCancellationRequested) break;
-
-                    try
-                    {
-                        HighlightLocation(locationData.Locations.IndexOf(location));
-                        UpdateScanning($"📍 Escaneando: {location.Name}");
-
-                        Log($"🔍 Procesando: {location.Name}");
-                        var startTime = DateTime.Now;
-
-                        var properties = await ScraperHelper.ScrapeProperties(location);
-
-                        var duration = (DateTime.Now - startTime).TotalMinutes;
-                        Log($"⏱ Completado en {duration:F2} min  –  {properties.Count} propiedades");
-                        UpdateCount();
-
-                        if (location != locationData.Locations.Last() && _isRunning)
-                        {
-                            Log("⏳ Esperando 30 s antes de la siguiente ubicación...\n");
-                            await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        Log("⏹ Operación cancelada");
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"❌ Error en {location.Name}: {ex.Message}\n");
-                    }
-                }
-
-                await ScraperHelper.DisposeAsync();
-                UpdateLastRun();
-                UpdateScanning("📍 En espera");
-
-                if (_isRunning && !cancellationToken.IsCancellationRequested)
-                {
-                    _nextCycleTime = DateTime.Now.AddMinutes(5);
-                    Log("\n✓ Ciclo completado  –  Próximo ciclo en 5 minutos...\n");
-                    await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
-                    _nextCycleTime = null;
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            Log("⏹ Scraping cancelado");
-        }
-        catch (Exception ex)
-        {
-            Log($"❌ Error crítico: {ex.Message}");
-        }
-        finally
-        {
-            _isRunning = false;
-            _nextCycleTime = null;
-            UpdateStatus("🔴 DETENIDO");
-            UpdateScanning("📍 En espera");
-
-            Application.MainLoop.Invoke(() =>
-            {
-                if (_startButton != null) _startButton.Enabled = true;
-                if (_stopButton  != null) _stopButton.Enabled  = false;
-            });
-        }
-    }
-
-    // ── UI helpers ───────────────────────────────────────────────────────────
-    static void HighlightLocation(int index)
-    {
-        Application.MainLoop.Invoke(() =>
-        {
-            if (_locationsList != null) _locationsList.SelectedItem = index;
-        });
-    }
-
-    static void UpdateStatus(string status)
-    {
-        Application.MainLoop.Invoke(() =>
-        {
-            if (_statusLabel != null) _statusLabel.Text = status;
-        });
-    }
-
-    static void UpdateScanning(string text)
-    {
-        Application.MainLoop.Invoke(() =>
-        {
-            if (_scanningLabel != null) _scanningLabel.Text = text;
-        });
-    }
-
-    static void UpdateCount()
-    {
-        Application.MainLoop.Invoke(() =>
-        {
-            if (_countLabel != null)
-            {
-                try
-                {
-                    int count = DatabaseHelper.GetPropertyCount();
-                    _countLabel.Text = $"📊 BD: {count:N0}";
-                }
-                catch (Exception ex)
-                {
-                    _countLabel.Text = $"📊 BD: error ({ex.Message})";
-                }
-            }
-        });
-    }
-
-    static void UpdateLastRun()
-    {
-        Application.MainLoop.Invoke(() =>
-        {
-            if (_lastRunLabel != null)
-                _lastRunLabel.Text = $"⏰ Último ciclo: {DateTime.Now:HH:mm:ss}";
-        });
-    }
-
-    static void Log(string message)
-    {
-        Application.MainLoop.Invoke(() =>
-        {
-            if (_logView != null)
-            {
-                var ts = DateTime.Now.ToString("HH:mm:ss");
-                _logView.Text += $"[{ts}] {message}\n";
-                _logView.MoveEnd();
-            }
-        });
-    }
-}
-
-public class LocationData
+app.MapPost("/logout", async (HttpContext ctx) =>
 {
-    public List<Location> Locations { get; set; } = new();
-}
+    await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect("/login");
+}).RequireAuthorization();
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+app.MapGet("/", (HttpContext ctx) =>
+{
+    return Results.Content(File.ReadAllText(
+        Path.Combine(builder.Environment.WebRootPath, "index.html")), "text/html");
+}).RequireAuthorization();
+
+// ── API: Status ───────────────────────────────────────────────────────────────
+app.MapGet("/api/status", (ScraperState state) =>
+{
+    string? countdown = null;
+    if (state.NextCycleTime.HasValue)
+    {
+        var remaining = state.NextCycleTime.Value - DateTime.Now;
+        countdown = remaining.TotalSeconds > 0
+            ? $"{(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2}"
+            : "00:00";
+    }
+
+    return Results.Ok(new
+    {
+        isRunning      = state.IsRunning,
+        cycleCount     = state.CycleCount,
+        newLeads       = state.NewLeadsSession,
+        emailsSent     = state.EmailsSentSession,
+        propertyCount  = state.PropertyCount,
+        lastRunTime    = state.LastRunTime?.ToString("dd/MM/yyyy HH:mm:ss"),
+        currentLocation = state.CurrentLocation,
+        countdown,
+        lastProperty   = state.LastProperty == null ? null : new
+        {
+            title       = state.LastProperty.Title,
+            location    = state.LastProperty.Location,
+            province    = state.LastProperty.Province,
+            price       = state.LastProperty.Price,
+            currency    = state.LastProperty.Currency,
+            url         = state.LastProperty.Url,
+            id          = state.LastProperty.Id,
+            isProfessional = state.LastProperty.IsProfessional,
+            isBank      = state.LastProperty.IsBank,
+            description = state.LastProperty.Description
+        }
+    });
+}).RequireAuthorization();
+
+// ── API: Start / Stop ─────────────────────────────────────────────────────────
+app.MapPost("/api/start", (ScraperState state, ScraperBackgroundService scraper) =>
+{
+    if (state.IsRunning) return Results.BadRequest(new { error = "Ya está en ejecución" });
+    scraper.Start();
+    return Results.Ok(new { message = "Scraping iniciado" });
+}).RequireAuthorization();
+
+app.MapPost("/api/stop", async (ScraperBackgroundService scraper) =>
+{
+    await scraper.StopAsync();
+    return Results.Ok(new { message = "Scraping detenido" });
+}).RequireAuthorization();
+
+// ── API: Logs SSE ─────────────────────────────────────────────────────────────
+app.MapGet("/api/logs/stream", async (HttpContext ctx, LogService logService) =>
+{
+    ctx.Response.Headers["Content-Type"]  = "text/event-stream";
+    ctx.Response.Headers["Cache-Control"] = "no-cache";
+    ctx.Response.Headers["Connection"]    = "keep-alive";
+    ctx.Response.Headers["X-Accel-Buffering"] = "no";
+
+    var ct = ctx.RequestAborted;
+
+    await foreach (var entry in logService.SubscribeAsync(ct))
+    {
+        var data = $"data: [{entry.Timestamp}] {entry.Message.Replace("\n", " ").Trim()}\n\n";
+        await ctx.Response.WriteAsync(data, ct);
+        await ctx.Response.Body.FlushAsync(ct);
+    }
+}).RequireAuthorization();
+
+// ── API: Properties ───────────────────────────────────────────────────────────
+app.MapGet("/api/properties", (int page = 1, int pageSize = 50, string? search = null) =>
+{
+    var all = DatabaseHelper.GetAllProperties();
+
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        var s = search.ToLowerInvariant();
+        all = all.Where(p =>
+            p.Title.ToLowerInvariant().Contains(s) ||
+            p.Location.ToLowerInvariant().Contains(s) ||
+            p.Province.ToLowerInvariant().Contains(s)
+        ).ToList();
+    }
+
+    var total = all.Count;
+    var items = all.Skip((page - 1) * pageSize).Take(pageSize).Select(p => new
+    {
+        p.Id, p.Title, p.Location, p.Province, p.Price, p.Currency,
+        p.Url, p.IsProfessional, p.IsBank, p.Description
+    });
+
+    return Results.Ok(new { total, page, pageSize, items });
+}).RequireAuthorization();
+
+// ── API: Locations ────────────────────────────────────────────────────────────
+string LocationsPath() => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
+
+app.MapGet("/api/locations", () =>
+{
+    var json = File.ReadAllText(LocationsPath());
+    var data = JsonConvert.DeserializeObject<LocationData>(json);
+    return Results.Ok(data?.Locations ?? new List<Location>());
+}).RequireAuthorization();
+
+app.MapPost("/api/locations", async (HttpContext ctx) =>
+{
+    var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+    var loc = JsonConvert.DeserializeObject<Location>(body);
+    if (loc == null || string.IsNullOrWhiteSpace(loc.Name) || string.IsNullOrWhiteSpace(loc.Url))
+        return Results.BadRequest(new { error = "Name y Url son obligatorios" });
+
+    var path = LocationsPath();
+    var json = File.ReadAllText(path);
+    var data = JsonConvert.DeserializeObject<LocationData>(json) ?? new LocationData();
+    data.Locations.Add(loc);
+    File.WriteAllText(path, JsonConvert.SerializeObject(data, Formatting.Indented));
+    return Results.Ok(data.Locations);
+}).RequireAuthorization();
+
+app.MapDelete("/api/locations/{index:int}", (int index) =>
+{
+    var path = LocationsPath();
+    var json = File.ReadAllText(path);
+    var data = JsonConvert.DeserializeObject<LocationData>(json) ?? new LocationData();
+    if (index < 0 || index >= data.Locations.Count)
+        return Results.BadRequest(new { error = "Índice fuera de rango" });
+
+    data.Locations.RemoveAt(index);
+    File.WriteAllText(path, JsonConvert.SerializeObject(data, Formatting.Indented));
+    return Results.Ok(data.Locations);
+}).RequireAuthorization();
+
+app.Run();
+
+// ── Login HTML ────────────────────────────────────────────────────────────────
+static string LoginHtml(string? error = null) => $@"<!DOCTYPE html>
+<html lang=""es"">
+<head>
+<meta charset=""UTF-8"">
+<meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+<title>NexumLabs – Login</title>
+<style>
+  :root{{--bg:#f5f7fa;--surface:#ffffff;--border:#e1e4e8;--text:#1c2128;--muted:#6e7781;--blue:#0969da;--green:#238636;--red:#cf222e}}
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;transition:background .2s,color .2s}}
+  .card{{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:40px;width:360px;box-shadow:0 4px 24px rgba(0,0,0,.08)}}
+  h1{{font-size:1.1rem;margin-bottom:4px;color:var(--blue);font-weight:700}}
+  .logo-wrap{{text-align:center;margin-bottom:20px}}
+  .logo-wrap img{{max-width:160px;height:auto}}
+  .subtitle{{color:var(--muted);font-size:.85rem;margin-bottom:28px}}
+  label{{display:block;font-size:.85rem;color:var(--muted);margin-bottom:6px}}
+  input{{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.95rem;margin-bottom:16px;outline:none}}
+  input:focus{{border-color:var(--blue)}}
+  button{{width:100%;padding:11px;background:var(--green);border:none;border-radius:8px;color:#fff;font-size:1rem;cursor:pointer;font-weight:600}}
+  button:hover{{opacity:.88}}
+  .error{{background:#fff0f0;border:1px solid var(--red);border-radius:8px;padding:10px 14px;color:var(--red);font-size:.85rem;margin-bottom:16px}}
+</style>
+</head>
+<body>
+<div class=""card"">
+  <div class=""logo-wrap""><img src=""/logo.png"" alt=""Logo"" onerror=""this.style.display='none'""></div>
+  <h1>NexumLabs</h1>
+  <p class=""subtitle"">Alertas automáticas de propiedades</p>
+  {(error != null ? $@"<div class=""error"">⚠ {error}</div>" : "")}
+  <form method=""post"" action=""/login"">
+    <label>Usuario</label>
+    <input type=""text"" name=""username"" autofocus autocomplete=""username"" required>
+    <label>Contraseña</label>
+    <input type=""password"" name=""password"" autocomplete=""current-password"" required>
+    <button type=""submit"">Entrar</button>
+  </form>
+</div>
+</body>
+</html>";

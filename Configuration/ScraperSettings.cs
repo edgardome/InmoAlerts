@@ -8,5 +8,6 @@
         public int TimeoutSeconds { get; set; } = 30;
         public bool UseProxy { get; set; } = false;
         public string ProxyUrl { get; set; } = string.Empty;
+        public int MinutesBetweenCycles { get; set; } = 5;
     }
 }

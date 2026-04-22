@@ -158,6 +158,12 @@ html.dark .loc-item.active { background: #0d1f35; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
+/* ── Listing type badges ── */
+.listing-venta    { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.7rem; font-weight:700; background:#ddf4ff; color:#0969da; border:1px solid #aadcf9; }
+.listing-alquiler { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.7rem; font-weight:700; background:#f3e8ff; color:#8250df; border:1px solid #d8b4fe; }
+html.dark .listing-venta    { background:#0d1f35; color:#58a6ff; border-color:#1f3d6e; }
+html.dark .listing-alquiler { background:#1e0a40; color:#bc8cff; border-color:#4c1d95; }
+
 /* ── Toast ── */
 .toast-wrap { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
 .toast { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: .85rem; min-width: 200px; box-shadow: var(--shadow); animation: slideIn .2s ease; }
@@ -226,6 +232,9 @@ html.dark .loc-item.active { background: #0d1f35; }
     <div id="last-lead-empty" class="last-lead-empty">Sin datos aún...</div>
     <div id="last-lead-data" class="last-lead" style="display:none">
       <div class="last-lead-info">
+        <div style="margin-bottom:5px">
+          <span id="ll-listing-badge"></span>
+        </div>
         <div class="prop-title" id="ll-title"></div>
         <div class="prop-meta" id="ll-location"></div>
         <div class="prop-meta" id="ll-vendor"></div>
@@ -275,10 +284,15 @@ html.dark .loc-item.active { background: #0d1f35; }
     <!-- Locations tab -->
     <div class="tab-panel" id="tab-locations">
       <div id="loc-list" class="loc-list"></div>
-      <div class="loc-add-form">
-        <input type="text" id="loc-name" placeholder="Nombre (ej: Madrid)" />
-        <input type="url"  id="loc-url"  placeholder="URL de búsqueda de Idealista" style="flex:2" />
-        <button class="btn-start btn-sm" onclick="addLocation()">+ Añadir</button>
+      <div class="loc-add-form" style="flex-direction:column;gap:6px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input type="text" id="loc-name" placeholder="Nombre (ej: Madrid)" style="flex:1;min-width:120px" />
+          <input type="url"  id="loc-url"  placeholder="URL venta Idealista" style="flex:2;min-width:200px" />
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="url"  id="loc-rent-url" placeholder="URL alquiler Idealista (opcional)" style="flex:3;min-width:200px" />
+          <button class="btn-start btn-sm" onclick="addLocation()">+ Añadir</button>
+        </div>
       </div>
     </div>
 
@@ -294,6 +308,7 @@ html.dark .loc-item.active { background: #0d1f35; }
           <thead>
             <tr>
               <th>ID</th>
+              <th>Tipo</th>
               <th>Título</th>
               <th>Ubicación</th>
               <th>Precio</th>
@@ -423,14 +438,20 @@ function updateStatusUI(s) {
     const p = s.lastProperty;
     document.getElementById('last-lead-empty').style.display = 'none';
     document.getElementById('last-lead-data').style.display  = 'grid';
-    document.getElementById('ll-title').textContent    = '🏠 ' + p.title;
+    const isAlquiler = p.listingType === 'Alquiler';
+    document.getElementById('ll-listing-badge').innerHTML =
+      `<span class="listing-${isAlquiler ? 'alquiler' : 'venta'}">${isAlquiler ? '🏠 ALQUILER' : '🏷 VENTA'}</span>`;
+    document.getElementById('ll-title').textContent    = p.title;
     document.getElementById('ll-location').textContent = '📍 ' + p.location + ', ' + p.province;
     const vtype = p.isBank ? 'banco' : p.isProfessional ? 'profesional' : 'particular';
     const vtext = p.isBank ? '🏦 Banco' : p.isProfessional ? '💼 Profesional' : '👤 Particular';
     document.getElementById('ll-vendor').innerHTML = `<span class="vendor-badge vendor-${vtype}">${vtext}</span> <span style="color:var(--muted);font-size:.75rem">ID: ${p.id}</span>`;
     const desc = p.description?.length > 120 ? p.description.slice(0, 117) + '…' : p.description;
     document.getElementById('ll-desc').textContent = '📝 ' + (desc || '');
-    document.getElementById('ll-price').textContent = (p.price?.toLocaleString('es') ?? '—') + ' ' + (p.currency ?? '€');
+    const priceLabel = isAlquiler
+      ? (p.price?.toLocaleString('es') ?? '—') + ' ' + (p.currency ?? '€') + '/mes'
+      : (p.price?.toLocaleString('es') ?? '—') + ' ' + (p.currency ?? '€');
+    document.getElementById('ll-price').textContent = priceLabel;
     const urlEl = document.getElementById('ll-url');
     urlEl.href = p.url;
     urlEl.style.display = p.url ? '' : 'none';
@@ -472,32 +493,42 @@ function renderLocations(locs) {
     el.innerHTML = '<div style="color:var(--muted);font-style:italic;padding:8px">No hay ubicaciones configuradas</div>';
     return;
   }
-  el.innerHTML = locs.map((l, i) => `
+  el.innerHTML = locs.map((l, i) => {
+    const rentBadge = l.rentUrl
+      ? `<span class="listing-alquiler" style="margin-left:4px">🏠 alquiler</span>`
+      : '';
+    const rentRow = l.rentUrl
+      ? `<div class="loc-url" title="${esc(l.rentUrl)}" style="color:var(--purple,#8250df)">↳ alquiler: ${esc(l.rentUrl)}</div>`
+      : '';
+    return `
     <div class="loc-item" id="loc-${i}">
       <div>
-        <div class="loc-name">${esc(l.name)}</div>
+        <div class="loc-name">${esc(l.name)} <span class="listing-venta" style="vertical-align:middle">🏷 venta</span>${rentBadge}</div>
         <div class="loc-url" title="${esc(l.url)}">${esc(l.url)}</div>
+        ${rentRow}
       </div>
       <button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteLocation(${i})">✕</button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 async function addLocation() {
-  const name = document.getElementById('loc-name').value.trim();
-  const url  = document.getElementById('loc-url').value.trim();
-  if (!name || !url) { toast('Nombre y URL son obligatorios', 'err'); return; }
+  const name    = document.getElementById('loc-name').value.trim();
+  const url     = document.getElementById('loc-url').value.trim();
+  const rentUrl = document.getElementById('loc-rent-url').value.trim() || undefined;
+  if (!name || !url) { toast('Nombre y URL de venta son obligatorios', 'err'); return; }
   try {
     const r = await fetch('/api/locations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, url })
+      body: JSON.stringify({ name, url, rentUrl })
     });
     if (r.ok) {
       const locs = await r.json();
       renderLocations(locs);
-      document.getElementById('loc-name').value = '';
-      document.getElementById('loc-url').value  = '';
+      document.getElementById('loc-name').value     = '';
+      document.getElementById('loc-url').value      = '';
+      document.getElementById('loc-rent-url').value = '';
       toast('Ubicación añadida ✓', 'ok');
     } else {
       const j = await r.json();
@@ -533,17 +564,23 @@ function renderProperties(d) {
   const tbody = document.getElementById('props-tbody');
   const items = d.items || [];
   if (items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Sin resultados</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Sin resultados</td></tr>';
   } else {
     tbody.innerHTML = items.map(p => {
       const vtype = p.isBank ? 'banco' : p.isProfessional ? 'profesional' : 'particular';
       const vtext = p.isBank ? '🏦 Banco' : p.isProfessional ? '💼 Prof.' : '👤 Part.';
       const desc  = p.description?.length > 60 ? p.description.slice(0, 57) + '…' : (p.description || '');
+      const isAlquiler = p.listingType === 'Alquiler';
+      const listingBadge = `<span class="listing-${isAlquiler ? 'alquiler' : 'venta'}">${isAlquiler ? 'Alquiler' : 'Venta'}</span>`;
+      const priceStr = isAlquiler
+        ? (p.price||0).toLocaleString('es') + ' ' + (p.currency||'€') + '/mes'
+        : (p.price||0).toLocaleString('es') + ' ' + (p.currency||'€');
       return `<tr>
         <td class="id-cell">${esc(p.id)}</td>
+        <td>${listingBadge}</td>
         <td><a href="${esc(p.url)}" target="_blank" title="${esc(p.title)}">${esc(p.title?.slice(0,50) || '')}</a></td>
         <td>${esc(p.location)}, ${esc(p.province)}</td>
-        <td class="price-cell">${(p.price||0).toLocaleString('es')} ${esc(p.currency||'€')}</td>
+        <td class="price-cell">${priceStr}</td>
         <td><span class="vendor-badge vendor-${vtype}">${vtext}</span></td>
         <td class="desc-cell" title="${esc(p.description||'')}">${esc(desc)}</td>
         <td><a href="${esc(p.url)}" target="_blank" class="btn-icon btn-sm">↗</a></td>

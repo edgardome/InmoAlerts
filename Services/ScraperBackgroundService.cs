@@ -20,6 +20,7 @@ namespace Idealista.Services
             _settings = settings.Value;
 
             ScraperHelper.OnNewPropertyFound = OnNewPropertyFound;
+            ScraperHelper.OnPriceChanged = OnPriceChanged;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -100,32 +101,59 @@ namespace Idealista.Services
                     {
                         if (!_state.IsRunning || ct.IsCancellationRequested) break;
 
+                        // ── Venta ──────────────────────────────────────────────
                         try
                         {
-                            _state.CurrentLocation = location.Name;
-                            _log.Log($"🔍 Procesando: {location.Name}");
+                            _state.CurrentLocation = $"{location.Name} (Venta)";
+                            _log.Log($"🔍 Procesando venta: {location.Name}");
                             var startTime = DateTime.Now;
 
-                            var properties = await ScraperHelper.ScrapeProperties(location);
+                            var properties = await ScraperHelper.ScrapeProperties(location, "Venta");
 
                             var duration = (DateTime.Now - startTime).TotalMinutes;
-                            _log.Log($"⏱ Completado en {duration:F2} min  –  {properties.Count} propiedades");
+                            _log.Log($"⏱ Venta completado en {duration:F2} min  –  {properties.Count} propiedades");
                             _state.PropertyCount = Helpers.DatabaseHelper.GetPropertyCount();
+                        }
+                        catch (OperationCanceledException) { _log.Log("⏹ Operación cancelada"); break; }
+                        catch (Exception ex) { _log.Log($"❌ Error venta {location.Name}: {ex.Message}\n"); }
 
-                            if (location != locationData.Locations.Last() && _state.IsRunning)
+                        // ── Alquiler (RentUrl explícita o auto-derivada del patrón de Idealista) ──
+                        string? rentUrl = location.RentUrl;
+                        if (string.IsNullOrWhiteSpace(rentUrl))
+                            rentUrl = DeriveRentUrl(location.Url);
+
+                        if (!string.IsNullOrWhiteSpace(rentUrl) && _state.IsRunning && !ct.IsCancellationRequested)
+                        {
+                            try
                             {
-                                _log.Log("⏳ Esperando 30 s antes de la siguiente ubicación...\n");
+                                _log.Log("⏳ Esperando 30 s antes de alquiler...\n");
                                 await Task.Delay(TimeSpan.FromSeconds(30), ct);
+
+                                var rentLocation = new Models.Location
+                                {
+                                    Name = location.Name,
+                                    Url = rentUrl
+                                };
+
+                                _state.CurrentLocation = $"{location.Name} (Alquiler)";
+                                _log.Log($"🔍 Procesando alquiler: {location.Name}  →  {rentUrl}");
+                                var startTime = DateTime.Now;
+
+                                var rentProperties = await ScraperHelper.ScrapeProperties(rentLocation, "Alquiler");
+
+                                var duration = (DateTime.Now - startTime).TotalMinutes;
+                                _log.Log($"⏱ Alquiler completado en {duration:F2} min  –  {rentProperties.Count} propiedades");
+                                _state.PropertyCount = Helpers.DatabaseHelper.GetPropertyCount();
                             }
+                            catch (OperationCanceledException) { _log.Log("⏹ Operación cancelada"); break; }
+                            catch (Exception ex) { _log.Log($"❌ Error alquiler {location.Name}: {ex.Message}\n"); }
                         }
-                        catch (OperationCanceledException)
+
+                        // Delay between locations
+                        if (location != locationData.Locations.Last() && _state.IsRunning && !ct.IsCancellationRequested)
                         {
-                            _log.Log("⏹ Operación cancelada");
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            _log.Log($"❌ Error en {location.Name}: {ex.Message}\n");
+                            _log.Log("⏳ Esperando 30 s antes de la siguiente ubicación...\n");
+                            await Task.Delay(TimeSpan.FromSeconds(30), ct);
                         }
                     }
 
@@ -166,7 +194,45 @@ namespace Idealista.Services
             _state.EmailsSentSession = EmailHelper.EmailsSentSession;
             _state.LastProperty = property;
             _state.PropertyCount = Helpers.DatabaseHelper.GetPropertyCount();
-            _log.Log($"✉ Nuevo lead → {property.Title} · {property.Price:N0}€ ({property.Location})");
+            string tag = property.ListingType == "Alquiler" ? "🏠 Alquiler" : "🏷 Venta";
+            _log.Log($"✉ Nuevo lead [{tag}] → {property.Title} · {property.Price:N0}€ ({property.Location})");
+        }
+
+        private void OnPriceChanged(Property property, int oldPrice)
+        {
+            _state.EmailsSentSession = EmailHelper.EmailsSentSession;
+            _state.LastProperty = property;
+            string tag = property.ListingType == "Alquiler" ? "🏠 Alquiler" : "🏷 Venta";
+            string direction = property.Price < oldPrice ? "⬇ bajada" : "⬆ subida";
+            _log.Log($"💰 Cambio de precio [{tag}] {direction}: {property.Title} · {oldPrice:N0}€ → {property.Price:N0}€ ({property.Location})");
+        }
+
+        /// <summary>
+        /// Derives an Idealista rental URL from a sale URL.
+        /// e.g. /venta-viviendas/... → /alquiler-viviendas/...
+        /// Returns null if the pattern is not recognised.
+        /// </summary>
+        private static string? DeriveRentUrl(string saleUrl)
+        {
+            // Standard Idealista sale → rent URL mapping
+            var replacements = new[]
+            {
+                ("venta-viviendas",     "alquiler-viviendas"),
+                ("venta-locales",       "alquiler-locales"),
+                ("venta-oficinas",      "alquiler-oficinas"),
+                ("venta-garajes",       "alquiler-garajes"),
+                ("venta-trasteros",     "alquiler-trasteros"),
+                ("casas-en-venta",      "casas-en-alquiler"),
+                ("pisos-en-venta",      "pisos-en-alquiler"),
+            };
+
+            foreach (var (saleSegment, rentSegment) in replacements)
+            {
+                if (saleUrl.Contains(saleSegment, StringComparison.OrdinalIgnoreCase))
+                    return saleUrl.Replace(saleSegment, rentSegment, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return null; // URL pattern not recognised — skip alquiler for this location
         }
     }
 

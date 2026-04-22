@@ -12,5 +12,6 @@
         public int Price { get; set; }
         public string Currency { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public string ListingType { get; set; } = "Venta"; // "Venta" | "Alquiler"
     }
 }

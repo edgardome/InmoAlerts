@@ -107,7 +107,8 @@ app.MapGet("/api/status", (ScraperState state) =>
             id          = state.LastProperty.Id,
             isProfessional = state.LastProperty.IsProfessional,
             isBank      = state.LastProperty.IsBank,
-            description = state.LastProperty.Description
+            description = state.LastProperty.Description,
+            listingType = state.LastProperty.ListingType
         }
     });
 }).RequireAuthorization();
@@ -163,7 +164,7 @@ app.MapGet("/api/properties", (int page = 1, int pageSize = 50, string? search =
     var items = all.Skip((page - 1) * pageSize).Take(pageSize).Select(p => new
     {
         p.Id, p.Title, p.Location, p.Province, p.Price, p.Currency,
-        p.Url, p.IsProfessional, p.IsBank, p.Description
+        p.Url, p.IsProfessional, p.IsBank, p.Description, p.ListingType
     });
 
     return Results.Ok(new { total, page, pageSize, items });

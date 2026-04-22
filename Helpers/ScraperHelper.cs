@@ -22,6 +22,11 @@ namespace Idealista.Helpers
         private static bool _browsersInstalled = false;
 
         public static Action<Property>? OnNewPropertyFound { get; set; }
+        public static Action<Property, int>? OnPriceChanged { get; set; } // (property, oldPrice)
+
+        // Detects listing type from URL if not explicitly provided
+        public static string DetectListingType(string url) =>
+            url.Contains("alquiler", StringComparison.OrdinalIgnoreCase) ? "Alquiler" : "Venta";
 
         static ScraperHelper()
         {
@@ -130,14 +135,15 @@ namespace Idealista.Helpers
             }
         }
 
-        public static async Task<List<Property>> ScrapeProperties(Models.Location location)
+        public static async Task<List<Property>> ScrapeProperties(Models.Location location, string? listingType = null)
         {
+            listingType ??= DetectListingType(location.Url);
             try
             {
                 if (string.IsNullOrEmpty(location.Url))
                     throw new ArgumentException("La URL no puede estar vacía", nameof(location.Url));
 
-                Console.WriteLine($"Iniciando scraping de: {location.Url}");
+                Console.WriteLine($"Iniciando scraping [{listingType}] de: {location.Url}");
                 var startTime = DateTime.Now;
 
                 var content = await ScrapeWithPlaywrightAsync(location.Url);
@@ -155,10 +161,8 @@ namespace Idealista.Helpers
                     {
                         try
                         {
-                            // Añadir delay entre artículos
                             await Task.Delay(TimeSpan.FromSeconds(2));
-
-                            var property = await ProcessArticle(article, name);
+                            var property = await ProcessArticle(article, name, listingType);
                             if (property != null)
                             {
                                 properties.Add(property);
@@ -172,7 +176,7 @@ namespace Idealista.Helpers
                 }
 
                 var duration = DateTime.Now - startTime;
-                Console.WriteLine($"Scraping completado. Duración: {duration.TotalSeconds:F2} segundos. Propiedades encontradas: {properties.Count}");
+                Console.WriteLine($"Scraping [{listingType}] completado. Duración: {duration.TotalSeconds:F2} segundos. Propiedades encontradas: {properties.Count}");
 
                 return properties;
             }
@@ -245,7 +249,7 @@ namespace Idealista.Helpers
             throw new Exception("No se pudo completar el scraping");
         }
 
-        private static async Task<Property?> ProcessArticle(HtmlNode article, string location)
+        private static async Task<Property?> ProcessArticle(HtmlNode article, string location, string listingType)
         {
             HtmlDocument articleDoc = new HtmlDocument();
             articleDoc.LoadHtml(article.InnerHtml);
@@ -270,15 +274,37 @@ namespace Idealista.Helpers
             property.Location = data["micrositeCityName"]?.ToString() ?? "";
             property.Province = location;
             property.Currency = "€";
-            string priceText = articleDoc.DocumentNode.SelectSingleNode("//span[contains(@class,'item-price')]")?.InnerText.Trim().Replace(",", "").Replace("€", "").Replace(".", "") ?? "0";
-            property.Price = int.TryParse(priceText, out int price) ? price : 0;
+            property.ListingType = listingType;
+
+            // Extract price: handles "150.000 €", "650 €/mes", "1.200 €/mes", etc.
+            string priceRaw = articleDoc.DocumentNode
+                .SelectSingleNode("//span[contains(@class,'item-price')]")?.InnerText.Trim() ?? "";
+            var priceMatch = Regex.Match(priceRaw, @"[\d]+(?:[.,\s][\d]+)*");
+            string priceClean = priceMatch.Success
+                ? Regex.Replace(priceMatch.Value, @"[.,\s]", "")
+                : "0";
+            property.Price = int.TryParse(priceClean, out int price) ? price : 0;
+
             property.Description = articleDoc.DocumentNode.SelectSingleNode("//div[contains(@class,'item-description')]//p")?.InnerText.Trim() ?? "";
 
-            if (!DatabaseHelper.PropertyExists(property.Id) && !property.IsProfessional)
+            if (!property.IsProfessional)
             {
-                DatabaseHelper.InsertProperty(property);
-                await EmailHelper.SendPropertyEmail(property);
-                OnNewPropertyFound?.Invoke(property);
+                int? storedPrice = DatabaseHelper.GetPropertyPrice(property.Id);
+
+                if (storedPrice == null)
+                {
+                    // New property
+                    DatabaseHelper.InsertProperty(property);
+                    await EmailHelper.SendPropertyEmail(property);
+                    OnNewPropertyFound?.Invoke(property);
+                }
+                else if (storedPrice != property.Price && property.Price > 0)
+                {
+                    // Price changed — update DB and alert
+                    DatabaseHelper.UpdatePropertyPrice(property.Id, property.Price);
+                    await EmailHelper.SendPriceChangeEmail(property, storedPrice.Value);
+                    OnPriceChanged?.Invoke(property, storedPrice.Value);
+                }
             }
 
             return property;

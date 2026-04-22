@@ -10,5 +10,6 @@ namespace Idealista.Models
     {
         public string Name { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
+        public string? RentUrl { get; set; } // Optional — Idealista alquiler URL for same location
     }
 }

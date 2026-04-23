@@ -287,24 +287,25 @@ namespace Idealista.Helpers
 
             property.Description = articleDoc.DocumentNode.SelectSingleNode("//div[contains(@class,'item-description')]//p")?.InnerText.Trim() ?? "";
 
-            if (!property.IsProfessional)
-            {
-                int? storedPrice = DatabaseHelper.GetPropertyPrice(property.Id);
+            // Only process properties from private sellers (no agencies or banks)
+            if (property.IsProfessional || property.IsBank)
+                return property;
 
-                if (storedPrice == null)
-                {
-                    // New property
-                    DatabaseHelper.InsertProperty(property);
-                    await EmailHelper.SendPropertyEmail(property);
-                    OnNewPropertyFound?.Invoke(property);
-                }
-                else if (storedPrice != property.Price && property.Price > 0)
-                {
-                    // Price changed — update DB and alert
-                    DatabaseHelper.UpdatePropertyPrice(property.Id, property.Price);
-                    await EmailHelper.SendPriceChangeEmail(property, storedPrice.Value);
-                    OnPriceChanged?.Invoke(property, storedPrice.Value);
-                }
+            int? storedPrice = DatabaseHelper.GetPropertyPrice(property.Id);
+
+            if (storedPrice == null)
+            {
+                // New property
+                DatabaseHelper.InsertProperty(property);
+                await EmailHelper.SendPropertyEmail(property);
+                OnNewPropertyFound?.Invoke(property);
+            }
+            else if (storedPrice != property.Price && property.Price > 0)
+            {
+                // Price changed — update DB and alert
+                DatabaseHelper.UpdatePropertyPrice(property.Id, property.Price);
+                await EmailHelper.SendPriceChangeEmail(property, storedPrice.Value);
+                OnPriceChanged?.Invoke(property, storedPrice.Value);
             }
 
             return property;

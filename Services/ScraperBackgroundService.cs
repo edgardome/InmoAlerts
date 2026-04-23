@@ -2,7 +2,6 @@
 using Idealista.Helpers;
 using Idealista.Models;
 using Microsoft.Extensions.Options;
-using Newtonsoft.Json;
 
 namespace Idealista.Services
 {
@@ -75,13 +74,11 @@ namespace Idealista.Services
             {
                 _log.Log("▶ Iniciando ciclo de scraping...");
 
-                string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
-                string jsonContent = await File.ReadAllTextAsync(jsonPath, ct);
-                var locationData = JsonConvert.DeserializeObject<LocationData>(jsonContent);
+                var locations = Helpers.DatabaseHelper.GetAllLocations();
 
-                if (locationData?.Locations == null || locationData.Locations.Count == 0)
+                if (locations.Count == 0)
                 {
-                    _log.Log("❌ No hay ubicaciones configuradas en locations.json");
+                    _log.Log("❌ No hay ubicaciones configuradas en la base de datos");
                     _state.IsRunning = false;
                     _scrapingCts = null;
                     return;
@@ -95,11 +92,10 @@ namespace Idealista.Services
                     _log.Log($"{"═",60}\n");
 
                     // Reload locations each cycle so changes take effect
-                    jsonContent = await File.ReadAllTextAsync(jsonPath, ct);
-                    locationData = JsonConvert.DeserializeObject<LocationData>(jsonContent);
-                    if (locationData?.Locations == null) break;
+                    locations = Helpers.DatabaseHelper.GetAllLocations();
+                    if (locations.Count == 0) break;
 
-                    foreach (var location in locationData.Locations)
+                    foreach (var location in locations)
                     {
                         if (!_state.IsRunning || ct.IsCancellationRequested) break;
 
@@ -161,7 +157,7 @@ namespace Idealista.Services
                         }
 
                         // Delay between locations
-                        if (location != locationData.Locations.Last() && _state.IsRunning && !ct.IsCancellationRequested)
+                        if (location != locations.Last() && _state.IsRunning && !ct.IsCancellationRequested)
                         {
                             _log.Log("⏳ Esperando 30 s antes de la siguiente ubicación...\n");
                             await Task.Delay(TimeSpan.FromSeconds(30), ct);
@@ -245,10 +241,5 @@ namespace Idealista.Services
 
             return null; // URL pattern not recognised — skip alquiler for this location
         }
-    }
-
-    public class LocationData
-    {
-        public List<Location> Locations { get; set; } = new();
     }
 }

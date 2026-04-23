@@ -169,10 +169,10 @@ html.dark .filter-active select, html.dark .filter-active input { background: #0
 .tab-panel.active { display: block; }
 
 /* ── Listing type badges ── */
-.listing-venta    { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.7rem; font-weight:700; background:#ddf4ff; color:#0969da; border:1px solid #aadcf9; }
-.listing-alquiler { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.7rem; font-weight:700; background:#f3e8ff; color:#8250df; border:1px solid #d8b4fe; }
-html.dark .listing-venta    { background:#0d1f35; color:#58a6ff; border-color:#1f3d6e; }
-html.dark .listing-alquiler { background:#1e0a40; color:#bc8cff; border-color:#4c1d95; }
+.listing-venta    { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.7rem; font-weight:700; background:#d1fadf; color:#1a7f37; border:1px solid #6fdd8b; }
+.listing-alquiler { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.7rem; font-weight:700; background:#ddf4ff; color:#0969da; border:1px solid #aadcf9; }
+html.dark .listing-venta    { background:#0d2e1a; color:#3fb950; border-color:#1a7f37; }
+html.dark .listing-alquiler { background:#0d1f35; color:#58a6ff; border-color:#1f3d6e; }
 
 /* ── Settings tab ── */
 .settings-section { margin-bottom: 24px; }
@@ -290,6 +290,7 @@ input:checked + .slider:before { transform: translateX(16px); }
       <div class="tab active" onclick="switchTab('tab-monitor', this)">📊 Monitor</div>
       <div class="tab"        onclick="switchTab('tab-locations', this)">📍 Ubicaciones</div>
       <div class="tab"        onclick="switchTab('tab-props', this)">🏠 Propiedades</div>
+      <div class="tab"        onclick="switchTab('tab-users', this)">👥 Usuarios</div>
       <div class="tab"        onclick="switchTab('tab-settings', this)">⚙️ Configuración</div>
     </div>
 
@@ -347,12 +348,6 @@ input:checked + .slider:before { transform: translateX(16px); }
           <option value="Venta">🏷 Venta</option>
           <option value="Alquiler">🏠 Alquiler</option>
         </select>
-        <select id="flt-vendor" onchange="loadProperties(1)" title="Tipo de vendedor">
-          <option value="">👤 Todos los vendedores</option>
-          <option value="particular">👤 Particular</option>
-          <option value="profesional">💼 Profesional</option>
-          <option value="banco">🏦 Banco</option>
-        </select>
         <select id="flt-province" onchange="loadProperties(1)" title="Provincia">
           <option value="">📍 Todas las provincias</option>
         </select>
@@ -383,6 +378,36 @@ input:checked + .slider:before { transform: translateX(16px); }
         <div class="page-btns">
           <button class="btn-secondary btn-sm" id="btn-prev" onclick="changePage(-1)" disabled>‹ Anterior</button>
           <button class="btn-secondary btn-sm" id="btn-next" onclick="changePage(1)"  disabled>Siguiente ›</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users tab -->
+    <div class="tab-panel" id="tab-users">
+
+      <!-- User list -->
+      <div id="users-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px"></div>
+
+      <!-- Create user form -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+        <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:10px">➕ Nuevo usuario</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+            <label style="font-size:.75rem;color:var(--muted);font-weight:600">Usuario</label>
+            <input type="text" id="new-user-name" placeholder="nombre" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:.88rem;outline:none">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+            <label style="font-size:.75rem;color:var(--muted);font-weight:600">Contraseña</label>
+            <input type="password" id="new-user-pass" placeholder="••••••••" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:.88rem;outline:none">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:.75rem;color:var(--muted);font-weight:600">Rol</label>
+            <select id="new-user-role" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:.88rem;outline:none">
+              <option value="user">👤 Usuario</option>
+              <option value="admin">🔑 Admin</option>
+            </select>
+          </div>
+          <button class="btn-start btn-sm" onclick="createUser()" style="height:34px">+ Crear</button>
         </div>
       </div>
     </div>
@@ -475,22 +500,6 @@ input:checked + .slider:before { transform: translateX(16px); }
         </div>
       </div>
 
-      <!-- Dashboard -->
-      <div class="settings-section">
-        <div class="settings-section-title">🔐 Dashboard (Acceso)</div>
-        <div class="settings-grid">
-          <div class="settings-field">
-            <label>Usuario</label>
-            <input type="text" id="cfg-dash-user" placeholder="admin">
-          </div>
-          <div class="settings-field">
-            <label>Nueva contraseña</label>
-            <input type="password" id="cfg-dash-pass" placeholder="••••••••">
-          </div>
-        </div>
-        <p style="font-size:.75rem;color:var(--muted);margin-top:8px">⚠ Tras cambiar las credenciales se cerrará la sesión.</p>
-      </div>
-
       <div class="settings-save-row">
         <button class="btn-save" onclick="saveSettings()">💾 Guardar configuración</button>
         <span id="cfg-save-status" style="font-size:.82rem;color:var(--muted)"></span>
@@ -514,16 +523,20 @@ let searchTimeout  = null;
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  // Apply saved theme before first paint
   const saved = localStorage.getItem('theme');
   if (saved === 'dark') {
     document.documentElement.classList.add('dark');
     document.getElementById('btn-theme').textContent = '☀️';
   }
+  initMe();
   connectSSE();
   pollStatus();
   statusInterval = setInterval(pollStatus, 5000);
   loadLocations();
+  // close province dropdowns when clicking outside
+  document.addEventListener('click', () => {
+    document.querySelectorAll('[id^="prov-dropdown-"]').forEach(el => el.style.display = 'none');
+  });
 });
 
 // ── Theme toggle ─────────────────────────────────────────────────────────────
@@ -661,7 +674,7 @@ function renderLocations(locs) {
     el.innerHTML = '<div style="color:var(--muted);font-style:italic;padding:8px">No hay ubicaciones configuradas</div>';
     return;
   }
-  el.innerHTML = locs.map((l, i) => {
+  el.innerHTML = locs.map((l) => {
     const rentBadge = l.rentUrl
       ? `<span class="listing-alquiler" style="margin-left:4px">🏠 alquiler</span>`
       : '';
@@ -669,13 +682,13 @@ function renderLocations(locs) {
       ? `<div class="loc-url" title="${esc(l.rentUrl)}" style="color:var(--purple,#8250df)">↳ alquiler: ${esc(l.rentUrl)}</div>`
       : '';
     return `
-    <div class="loc-item" id="loc-${i}">
+    <div class="loc-item" id="loc-${l.id}">
       <div>
         <div class="loc-name">${esc(l.name)} <span class="listing-venta" style="vertical-align:middle">🏷 venta</span>${rentBadge}</div>
         <div class="loc-url" title="${esc(l.url)}">${esc(l.url)}</div>
         ${rentRow}
       </div>
-      <button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteLocation(${i})">✕</button>
+      <button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteLocation(${l.id})">✕</button>
     </div>`;
   }).join('');
 }
@@ -705,13 +718,16 @@ async function addLocation() {
   } catch { toast('Error de conexión', 'err'); }
 }
 
-async function deleteLocation(index) {
+async function deleteLocation(id) {
   try {
-    const r = await fetch(`/api/locations/${index}`, { method: 'DELETE' });
+    const r = await fetch(`/api/locations/${id}`, { method: 'DELETE' });
     if (r.ok) {
       const locs = await r.json();
       renderLocations(locs);
       toast('Ubicación eliminada', 'ok');
+    } else {
+      const j = await r.json();
+      toast(j.error || 'Error', 'err');
     }
   } catch { toast('Error de conexión', 'err'); }
 }
@@ -721,7 +737,6 @@ async function loadProperties(page = 1) {
   currentPage = page;
   const search   = document.getElementById('prop-search')?.value.trim() || '';
   const listing  = document.getElementById('flt-listing')?.value || '';
-  const vendor   = document.getElementById('flt-vendor')?.value || '';
   const province = document.getElementById('flt-province')?.value || '';
   const minPrice = document.getElementById('flt-min-price')?.value || '';
   const maxPrice = document.getElementById('flt-max-price')?.value || '';
@@ -729,13 +744,12 @@ async function loadProperties(page = 1) {
   const params = new URLSearchParams({ page, pageSize });
   if (search)   params.set('search', search);
   if (listing)  params.set('listingType', listing);
-  if (vendor)   params.set('vendorType', vendor);
   if (province) params.set('province', province);
   if (minPrice) params.set('minPrice', minPrice);
   if (maxPrice) params.set('maxPrice', maxPrice);
 
   // Highlight active filters
-  ['flt-listing','flt-vendor','flt-province'].forEach(id => {
+  ['flt-listing','flt-province'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.parentElement.classList.toggle('filter-active', !!el.value);
     if (el) el.classList.toggle('filter-active', !!el.value);
@@ -804,7 +818,6 @@ function debounceSearch() {
 function resetFilters() {
   document.getElementById('prop-search').value   = '';
   document.getElementById('flt-listing').value   = '';
-  document.getElementById('flt-vendor').value    = '';
   document.getElementById('flt-province').value  = '';
   document.getElementById('flt-min-price').value = '';
   document.getElementById('flt-max-price').value = '';
@@ -835,6 +848,7 @@ function switchTab(id, el) {
   if (id === 'tab-props')     loadProperties(1);
   if (id === 'tab-locations') loadLocations();
   if (id === 'tab-settings')  loadSettings();
+  if (id === 'tab-users')     { loadUsers(); loadAllProvinces(); }
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -874,14 +888,6 @@ async function loadSettings() {
     document.getElementById('cfg-from-email').value  = em.FromEmail   ?? em.fromEmail   ?? '';
     _cfgRecipients = Array.isArray(em.Recipients ?? em.recipients) ? [...(em.Recipients ?? em.recipients)] : [];
     renderRecipients();
-
-    // Dashboard
-    const db = d.dashboard || {};
-    const dashUserEl = document.getElementById('cfg-dash-user');
-    const dbUser = db.Username ?? db.username ?? '';
-    dashUserEl.value = dbUser;
-    dashUserEl.dataset.original = dbUser;
-    document.getElementById('cfg-dash-pass').value = '';
   } catch { toast('Error al cargar la configuración', 'err'); }
 }
 
@@ -918,9 +924,6 @@ async function saveSettings() {
   statusEl.textContent = 'Guardando...';
   statusEl.style.color = 'var(--muted)';
 
-  const dashPass = document.getElementById('cfg-dash-pass').value;
-  const dashUser = document.getElementById('cfg-dash-user').value.trim();
-
   const payload = {
     scraper: {
       minutesBetweenCycles:  parseInt(document.getElementById('cfg-minutes-cycles').value) || 5,
@@ -937,10 +940,6 @@ async function saveSettings() {
       password:   document.getElementById('cfg-smtp-pass').value,
       fromEmail:  document.getElementById('cfg-from-email').value.trim(),
       recipients: _cfgRecipients,
-    },
-    dashboard: {
-      username: dashUser || 'admin',
-      ...(dashPass ? { password: dashPass } : {}),
     }
   };
 
@@ -959,13 +958,6 @@ async function saveSettings() {
       statusEl.textContent = '✓ Guardado';
       statusEl.style.color = 'var(--green)';
       setTimeout(() => statusEl.textContent = '', 3000);
-      // If dashboard credentials changed, force logout
-      if (dashPass || (dashUser && dashUser !== document.getElementById('cfg-dash-user').dataset.original)) {
-        setTimeout(() => {
-          toast('Credenciales cambiadas. Cerrando sesión...', 'ok');
-          setTimeout(() => document.querySelector('form[action="/logout"]').submit(), 1500);
-        }, 500);
-      }
     } else {
       toast(j.error || 'Error al guardar', 'err');
       statusEl.textContent = '✗ Error';
@@ -976,6 +968,278 @@ async function saveSettings() {
     statusEl.textContent = '✗ Error';
     statusEl.style.color = 'var(--red)';
   }
+}
+
+// ── User Management ───────────────────────────────────────────────────────────
+let _currentUser = null;
+
+async function initMe() {
+  try {
+    const r = await fetch('/api/me');
+    if (r.ok) _currentUser = await r.json();
+  } catch {}
+}
+
+async function loadUsers() {
+  try {
+    const r = await fetch('/api/users');
+    if (!r.ok) return;
+    const users = await r.json();
+    renderUsers(users);
+  } catch {}
+}
+
+const _editEmailsMap      = {};
+const _editProvincesMap   = {};
+const _editProvincesAllMode = {};
+let   _allProvinces       = [];
+
+async function loadAllProvinces() {
+  try {
+    const r = await fetch('/api/properties?pageSize=1');
+    if (!r.ok) return;
+    const d = await r.json();
+    _allProvinces = d.provinces || [];
+    const dl = document.getElementById('provinces-datalist');
+    if (dl) { dl.innerHTML = ''; _allProvinces.forEach(p => { const o = document.createElement('option'); o.value = p; dl.appendChild(o); }); }
+  } catch {}
+}
+
+function renderUsers(users) {
+  const el = document.getElementById('users-list');
+  if (!users || users.length === 0) {
+    el.innerHTML = '<div style="color:var(--muted);font-style:italic;padding:8px">Sin usuarios</div>';
+    return;
+  }
+
+  el.innerHTML = users.map(u => {
+    const isSelf    = _currentUser?.username === u.username;
+    const roleLabel = u.role === 'admin' ? '🔑 Admin' : '👤 Usuario';
+    const roleBadge = u.role === 'admin'
+      ? `<span class="vendor-badge vendor-banco">${roleLabel}</span>`
+      : `<span class="vendor-badge vendor-particular">${roleLabel}</span>`;
+    const editId    = `user-edit-${u.id}`;
+    const createdAt = u.createdAt ? u.createdAt.split('T')[0] : '';
+    const emailCount = (u.alertEmails || []).length;
+    const emailBadge = emailCount > 0
+      ? `<span style="font-size:.7rem;color:var(--blue);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1px 7px">✉ ${emailCount}</span>`
+      : `<span style="font-size:.7rem;color:var(--muted)">sin emails</span>`;
+    const provCount = (u.allowedProvinces || []).length;
+    const provBadge = provCount > 0
+      ? `<span style="font-size:.7rem;color:var(--green);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1px 7px">📍 ${provCount}</span>`
+      : `<span style="font-size:.7rem;color:var(--muted)">todas las zonas</span>`;
+
+    _editEmailsMap[u.id]       = [...(u.alertEmails      || [])];
+    _editProvincesMap[u.id]    = [...(u.allowedProvinces || [])];
+    _editProvincesAllMode[u.id] = (u.allowedProvinces || []).length === 0;
+
+    return `
+    <div class="loc-item" id="user-row-${u.id}">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap">
+        <span style="font-weight:600;font-size:.88rem">${esc(u.username)}</span>
+        ${roleBadge}
+        ${isSelf ? '<span style="font-size:.7rem;color:var(--blue)">(tú)</span>' : ''}
+        ${emailBadge}
+        ${provBadge}
+        <span style="font-size:.72rem;color:var(--muted)">${createdAt}</span>
+      </div>
+      <div id="${editId}" style="display:none;flex-direction:column;gap:8px;margin-top:10px;width:100%">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <input type="text" placeholder="Nuevo usuario" id="edit-name-${u.id}" value="${esc(u.username)}"
+            style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:.82rem;outline:none;width:140px">
+          <input type="password" placeholder="Nueva contraseña" id="edit-pass-${u.id}"
+            style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:.82rem;outline:none;width:140px">
+          <select id="edit-role-${u.id}"
+            style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:.82rem;outline:none">
+            <option value="user" ${u.role==='user'?'selected':''}>👤 Usuario</option>
+            <option value="admin" ${u.role==='admin'?'selected':''}>🔑 Admin</option>
+          </select>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:8px">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px;font-weight:600">✉ Emails para alertas</div>
+          <div id="edit-emails-list-${u.id}" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="email" placeholder="nuevo@email.com" id="edit-email-input-${u.id}"
+              style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:.82rem;outline:none;flex:1;min-width:180px"
+              onkeydown="if(event.key==='Enter'){addEditEmail(${u.id});event.preventDefault();}">
+            <button class="btn-secondary btn-sm" onclick="addEditEmail(${u.id})">+ Añadir</button>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:8px">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:4px;font-weight:600">📍 Zonas asignadas</div>
+          <div style="position:relative">
+            <button id="prov-btn-${u.id}" onclick="toggleProvinceDropdown(event,${u.id})"
+              style="width:100%;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:.82rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <span id="prov-summary-${u.id}">—</span>
+              <span style="opacity:.5;font-size:.7rem">▾</span>
+            </button>
+            <div id="prov-dropdown-${u.id}" style="display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.25)">
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:4px">
+          <button class="btn-save btn-sm" onclick="saveUser(${u.id})">💾 Guardar</button>
+          <button class="btn-secondary btn-sm" onclick="toggleEditUser(${u.id})">Cancelar</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn-icon btn-sm" onclick="toggleEditUser(${u.id})" title="Editar">✏️</button>
+        ${!isSelf ? `<button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteUser(${u.id},'${esc(u.username)}')" title="Eliminar">✕</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  users.forEach(u => {
+    renderEditEmailsList(u.id);
+    renderProvinceSummary(u.id);
+  });
+}
+
+function renderEditEmailsList(uid) {
+  const el = document.getElementById(`edit-emails-list-${uid}`);
+  if (!el) return;
+  const emails = _editEmailsMap[uid] || [];
+  if (emails.length === 0) {
+    el.innerHTML = '<span style="font-size:.75rem;color:var(--muted);font-style:italic">Sin emails configurados</span>';
+    return;
+  }
+  el.innerHTML = emails.map((e, i) => `
+    <span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:.75rem">
+      ${esc(e)}
+      <button onclick="removeEditEmail(${uid},${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:0;line-height:1" title="Eliminar">✕</button>
+    </span>`).join('');
+}
+
+function addEditEmail(uid) {
+  const input = document.getElementById(`edit-email-input-${uid}`);
+  const val   = input.value.trim().toLowerCase();
+  if (!val || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) { toast('Email inválido', 'err'); return; }
+  if (!_editEmailsMap[uid]) _editEmailsMap[uid] = [];
+  if (_editEmailsMap[uid].includes(val)) { toast('Ya está en la lista', 'err'); return; }
+  _editEmailsMap[uid].push(val);
+  input.value = '';
+  renderEditEmailsList(uid);
+}
+
+function removeEditEmail(uid, idx) {
+  _editEmailsMap[uid].splice(idx, 1);
+  renderEditEmailsList(uid);
+}
+
+function renderProvinceSummary(uid) {
+  const el = document.getElementById(`prov-summary-${uid}`);
+  if (!el) return;
+  const all  = _editProvincesAllMode[uid];
+  const sel  = _editProvincesMap[uid] || [];
+  el.textContent = all ? '✅ Todas las zonas' : sel.length === 0 ? 'Sin zonas seleccionadas' : `📍 ${sel.length} zona${sel.length > 1 ? 's' : ''} seleccionada${sel.length > 1 ? 's' : ''}`;
+}
+
+function renderProvinceCheckboxes(uid) {
+  const el = document.getElementById(`prov-dropdown-${uid}`);
+  if (!el) return;
+  const all = _editProvincesAllMode[uid];
+  const sel = _editProvincesMap[uid] || [];
+  const rows = [`
+    <label onclick="toggleAllProvinces(${uid})"
+      style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:.82rem;font-weight:600;background:var(--surface)">
+      <input type="checkbox" ${all ? 'checked' : ''} onclick="event.preventDefault()" style="cursor:pointer;accent-color:var(--blue)">
+      Todas las zonas
+    </label>`];
+  (_allProvinces.length ? _allProvinces : sel).forEach(p => {
+    const checked = all || sel.some(s => s.toLowerCase() === p.toLowerCase());
+    rows.push(`
+    <label onclick="toggleProvince(${uid},'${p.replace(/'/g,"\\'")}')"
+      style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
+      <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.preventDefault()" style="cursor:pointer;accent-color:var(--blue)">
+      ${esc(p)}
+    </label>`);
+  });
+  el.innerHTML = rows.join('');
+}
+
+function toggleProvinceDropdown(event, uid) {
+  event.stopPropagation();
+  const dd = document.getElementById(`prov-dropdown-${uid}`);
+  const isOpen = dd.style.display !== 'none';
+  // close all other dropdowns
+  document.querySelectorAll('[id^="prov-dropdown-"]').forEach(el => el.style.display = 'none');
+  if (!isOpen) { renderProvinceCheckboxes(uid); dd.style.display = 'block'; }
+}
+
+function toggleAllProvinces(uid) {
+  _editProvincesAllMode[uid] = !_editProvincesAllMode[uid];
+  if (!_editProvincesAllMode[uid]) _editProvincesMap[uid] = [];
+  renderProvinceCheckboxes(uid);
+  renderProvinceSummary(uid);
+}
+
+function toggleProvince(uid, province) {
+  _editProvincesAllMode[uid] = false;
+  if (!_editProvincesMap[uid]) _editProvincesMap[uid] = [];
+  const idx = _editProvincesMap[uid].findIndex(p => p.toLowerCase() === province.toLowerCase());
+  if (idx >= 0) _editProvincesMap[uid].splice(idx, 1);
+  else          _editProvincesMap[uid].push(province);
+  // if all individual provinces are now checked, switch to all-mode
+  if (_allProvinces.length > 0 && _editProvincesMap[uid].length === _allProvinces.length)
+    { _editProvincesAllMode[uid] = true; _editProvincesMap[uid] = []; }
+  renderProvinceCheckboxes(uid);
+  renderProvinceSummary(uid);
+}
+
+function toggleEditUser(id) {
+  const el = document.getElementById(`user-edit-${id}`);
+  const isVisible = el.style.display !== 'none';
+  el.style.display = isVisible ? 'none' : 'flex';
+}
+
+async function saveUser(id) {
+  const newUsername       = document.getElementById(`edit-name-${id}`).value.trim();
+  const newPassword       = document.getElementById(`edit-pass-${id}`).value;
+  const newRole           = document.getElementById(`edit-role-${id}`).value;
+  const alertEmails       = _editEmailsMap[id]    || [];
+  const allowedProvinces  = _editProvincesAllMode[id] ? [] : (_editProvincesMap[id] || []);
+  try {
+    const r = await fetch(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: newUsername, password: newPassword || undefined, role: newRole, alertEmails, allowedProvinces })
+    });
+    const j = await r.json();
+    if (r.ok) { renderUsers(j); toast('Usuario actualizado ✓', 'ok'); }
+    else       { toast(j.error || 'Error', 'err'); }
+  } catch { toast('Error de conexión', 'err'); }
+}
+
+async function createUser() {
+  const username = document.getElementById('new-user-name').value.trim();
+  const password = document.getElementById('new-user-pass').value;
+  const role     = document.getElementById('new-user-role').value;
+  if (!username || !password) { toast('Usuario y contraseña son obligatorios', 'err'); return; }
+  try {
+    const r = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, role })
+    });
+    const j = await r.json();
+    if (r.ok) {
+      renderUsers(j);
+      document.getElementById('new-user-name').value = '';
+      document.getElementById('new-user-pass').value = '';
+      document.getElementById('new-user-role').value = 'user';
+      toast('Usuario creado ✓', 'ok');
+    } else { toast(j.error || 'Error', 'err'); }
+  } catch { toast('Error de conexión', 'err'); }
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`¿Eliminar el usuario "${username}"?`)) return;
+  try {
+    const r = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    const j = await r.json();
+    if (r.ok) { renderUsers(j); toast('Usuario eliminado', 'ok'); }
+    else       { toast(j.error || 'Error', 'err'); }
+  } catch { toast('Error de conexión', 'err'); }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

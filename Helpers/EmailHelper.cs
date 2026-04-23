@@ -27,9 +27,10 @@ namespace Idealista.Helpers
         {
             try
             {
-                if (_emailSettings.Recipients == null || _emailSettings.Recipients.Count == 0)
+                var recipients = DatabaseHelper.GetAllAlertEmails();
+                if (recipients.Count == 0)
                 {
-                    Console.WriteLine("No hay destinatarios configurados en appsettings.json");
+                    Console.WriteLine("⚠️ No hay destinatarios de alertas configurados en ningún usuario");
                     return;
                 }
 
@@ -91,17 +92,14 @@ namespace Idealista.Helpers
                     </div>";
 
                 var htmlView = AlternateView.CreateAlternateViewFromString(htmlBody, null, MediaTypeNames.Text.Html);
-
                 mailMessage.AlternateViews.Add(htmlView);
 
-                foreach (var email in _emailSettings.Recipients)
-                {
+                foreach (var email in recipients)
                     mailMessage.Bcc.Add(email);
-                }
 
                 await smtpClient.SendMailAsync(mailMessage);
                 EmailsSentSession++;
-                Console.WriteLine($"✉ Email enviado para propiedad {property.Id} a {_emailSettings.Recipients.Count} destinatario(s)");
+                Console.WriteLine($"✉ Email enviado para propiedad {property.Id} a {recipients.Count} destinatario(s)");
             }
             catch (Exception ex)
             {
@@ -113,7 +111,8 @@ namespace Idealista.Helpers
         {
             try
             {
-                if (_emailSettings.Recipients == null || _emailSettings.Recipients.Count == 0) return;
+                var recipients = DatabaseHelper.GetAllAlertEmails();
+                if (recipients.Count == 0) return;
 
                 using var smtpClient = new SmtpClient(_emailSettings.SmtpServer)
                 {
@@ -174,7 +173,7 @@ namespace Idealista.Helpers
                 var htmlView = AlternateView.CreateAlternateViewFromString(htmlBody, null, MediaTypeNames.Text.Html);
                 mailMessage.AlternateViews.Add(htmlView);
 
-                foreach (var email in _emailSettings.Recipients)
+                foreach (var email in recipients)
                     mailMessage.Bcc.Add(email);
 
                 await smtpClient.SendMailAsync(mailMessage);

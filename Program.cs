@@ -15,7 +15,6 @@ var builder = WebApplication.CreateBuilder(args);
 // ── Configuration ────────────────────────────────────────────────────────────
 builder.Services.Configure<ScraperSettings>(builder.Configuration.GetSection("ScraperSettings"));
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
-builder.Services.Configure<DashboardSettings>(builder.Configuration.GetSection("DashboardSettings"));
 
 // ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<ScraperState>();
@@ -33,7 +32,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromDays(7);
         options.SlidingExpiration = true;
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", p => p.RequireRole("admin"));
+});
 
 var app = builder.Build();
 
@@ -44,19 +46,24 @@ app.UseStaticFiles();
 // ── Login ─────────────────────────────────────────────────────────────────────
 app.MapGet("/login", () => Results.Content(LoginHtml(), "text/html")).AllowAnonymous();
 
-app.MapPost("/login", async (HttpContext ctx, IOptions<DashboardSettings> dashOpts) =>
+app.MapPost("/login", async (HttpContext ctx) =>
 {
     var form = await ctx.Request.ReadFormAsync();
     var user = form["username"].ToString();
     var pass = form["password"].ToString();
-    var settings = dashOpts.Value;
 
-    if (user == settings.Username && pass == settings.Password)
+    var appUser = DatabaseHelper.ValidateUser(user, pass);
+    if (appUser != null)
     {
-        var claims = new[] { new Claim(ClaimTypes.Name, user) };
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.Name, appUser.Username),
+            new Claim(ClaimTypes.Role, appUser.Role),
+            new Claim("userId", appUser.Id.ToString())
+        };
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
-        return Results.Redirect("/");
+        return Results.Redirect(appUser.Role == "admin" ? "/" : "/user");
     }
 
     return Results.Content(LoginHtml("Usuario o contraseña incorrectos"), "text/html");
@@ -71,8 +78,112 @@ app.MapPost("/logout", async (HttpContext ctx) =>
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 app.MapGet("/", (HttpContext ctx) =>
 {
+    if (ctx.User.IsInRole("user"))
+        return Results.Redirect("/user");
     return Results.Content(File.ReadAllText(
         Path.Combine(builder.Environment.WebRootPath, "index.html")), "text/html");
+}).RequireAuthorization();
+
+app.MapGet("/user", (HttpContext ctx) =>
+{
+    if (ctx.User.IsInRole("admin"))
+        return Results.Redirect("/");
+    return Results.Content(File.ReadAllText(
+        Path.Combine(builder.Environment.WebRootPath, "user.html")), "text/html");
+}).RequireAuthorization();
+
+// ── API: Me ───────────────────────────────────────────────────────────────────
+app.MapGet("/api/me", (HttpContext ctx) =>
+{
+    var username = ctx.User.Identity?.Name ?? "";
+    var user = DatabaseHelper.GetAllUsers().FirstOrDefault(u =>
+        u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+    return Results.Ok(new
+    {
+        username,
+        role             = ctx.User.IsInRole("admin") ? "admin" : "user",
+        alertEmails      = user?.AlertEmails      ?? new List<string>(),
+        allowedProvinces = user?.AllowedProvinces ?? new List<string>()
+    });
+}).RequireAuthorization();
+
+// ── API: Users (admin only) ───────────────────────────────────────────────────
+app.MapGet("/api/users", () =>
+{
+    var users = DatabaseHelper.GetAllUsers()
+        .Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.CreatedAt });
+    return Results.Ok(users);
+}).RequireAuthorization("AdminOnly");
+
+app.MapPost("/api/users", async (HttpContext ctx) =>
+{
+    var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+    JObject data;
+    try { data = JObject.Parse(body); } catch { return Results.BadRequest(new { error = "JSON inválido" }); }
+
+    var username = data["username"]?.ToString();
+    var password = data["password"]?.ToString();
+    var role     = data["role"]?.ToString() ?? "user";
+
+    var (ok, error) = DatabaseHelper.CreateUser(username ?? "", password ?? "", role);
+    if (!ok) return Results.BadRequest(new { error });
+
+    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.CreatedAt });
+    return Results.Ok(users);
+}).RequireAuthorization("AdminOnly");
+
+app.MapPut("/api/users/{id:int}", async (HttpContext ctx, int id) =>
+{
+    var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+    JObject data;
+    try { data = JObject.Parse(body); } catch { return Results.BadRequest(new { error = "JSON inválido" }); }
+
+    var newUsername        = data["username"]?.ToString();
+    var newPassword        = data["password"]?.ToString();
+    var newRole            = data["role"]?.ToString();
+    var newAlertEmails     = data["alertEmails"]?.ToObject<List<string>>();
+    var newAllowedProvinces = data["allowedProvinces"]?.ToObject<List<string>>();
+    var currentUser        = ctx.User.Identity?.Name ?? "";
+
+    var (ok, error) = DatabaseHelper.UpdateUser(id, newUsername, newPassword, newRole, newAlertEmails, newAllowedProvinces, currentUser);
+    if (!ok) return Results.BadRequest(new { error });
+
+    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.CreatedAt });
+    return Results.Ok(users);
+}).RequireAuthorization("AdminOnly");
+
+app.MapDelete("/api/users/{id:int}", (HttpContext ctx, int id) =>
+{
+    var currentUser = ctx.User.Identity?.Name ?? "";
+    var (ok, error) = DatabaseHelper.DeleteUser(id, currentUser);
+    if (!ok) return Results.BadRequest(new { error });
+
+    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.CreatedAt });
+    return Results.Ok(users);
+}).RequireAuthorization("AdminOnly");
+
+// ── API: My alert emails (any authenticated user) ─────────────────────────────
+app.MapGet("/api/me/emails", (HttpContext ctx) =>
+{
+    var idClaim = ctx.User.FindFirst("userId")?.Value;
+    if (!int.TryParse(idClaim, out int userId)) return Results.Unauthorized();
+    var user = DatabaseHelper.GetUserById(userId);
+    return user == null ? Results.NotFound() : Results.Ok(user.AlertEmails);
+}).RequireAuthorization();
+
+app.MapPut("/api/me/emails", async (HttpContext ctx) =>
+{
+    var idClaim = ctx.User.FindFirst("userId")?.Value;
+    if (!int.TryParse(idClaim, out int userId)) return Results.Unauthorized();
+
+    var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+    List<string> emails;
+    try   { emails = System.Text.Json.JsonSerializer.Deserialize<List<string>>(body) ?? new(); }
+    catch { return Results.BadRequest(new { error = "JSON inválido" }); }
+
+    var (ok, error) = DatabaseHelper.UpdateUserEmails(userId, emails);
+    if (!ok) return Results.BadRequest(new { error });
+    return Results.Ok(DatabaseHelper.GetUserById(userId)?.AlertEmails ?? new List<string>());
 }).RequireAuthorization();
 
 // ── API: Status ───────────────────────────────────────────────────────────────
@@ -120,13 +231,13 @@ app.MapPost("/api/start", (ScraperState state, ScraperBackgroundService scraper)
     if (state.IsRunning) return Results.BadRequest(new { error = "Ya está en ejecución" });
     scraper.Start();
     return Results.Ok(new { message = "Scraping iniciado" });
-}).RequireAuthorization();
+}).RequireAuthorization("AdminOnly");
 
 app.MapPost("/api/stop", async (ScraperBackgroundService scraper) =>
 {
     await scraper.StopAsync();
     return Results.Ok(new { message = "Scraping detenido" });
-}).RequireAuthorization();
+}).RequireAuthorization("AdminOnly");
 
 // ── API: Logs SSE ─────────────────────────────────────────────────────────────
 app.MapGet("/api/logs/stream", async (HttpContext ctx, LogService logService) =>
@@ -144,10 +255,10 @@ app.MapGet("/api/logs/stream", async (HttpContext ctx, LogService logService) =>
         await ctx.Response.WriteAsync(data, ct);
         await ctx.Response.Body.FlushAsync(ct);
     }
-}).RequireAuthorization();
+}).RequireAuthorization("AdminOnly");
 
 // ── API: Properties ───────────────────────────────────────────────────────────
-app.MapGet("/api/properties", (
+app.MapGet("/api/properties", (HttpContext ctx,
     int page = 1, int pageSize = 50,
     string? search = null,
     string? listingType = null,
@@ -157,6 +268,18 @@ app.MapGet("/api/properties", (
     string? province = null) =>
 {
     var all = DatabaseHelper.GetAllProperties();
+
+    // Non-admin users: restrict to their assigned provinces
+    List<string> userProvinces = new();
+    if (!ctx.User.IsInRole("admin"))
+    {
+        var idClaim = ctx.User.FindFirst("userId")?.Value;
+        if (int.TryParse(idClaim, out int userId))
+            userProvinces = DatabaseHelper.GetUserById(userId)?.AllowedProvinces ?? new();
+        if (userProvinces.Count > 0)
+            all = all.Where(p => userProvinces.Any(ap =>
+                p.Province.Equals(ap, StringComparison.OrdinalIgnoreCase))).ToList();
+    }
 
     if (!string.IsNullOrWhiteSpace(search))
     {
@@ -189,9 +312,12 @@ app.MapGet("/api/properties", (
     if (!string.IsNullOrWhiteSpace(province))
         all = all.Where(p => p.Province.Equals(province, StringComparison.OrdinalIgnoreCase)).ToList();
 
-    var provinces = DatabaseHelper.GetAllProperties()
-        .Select(p => p.Province).Where(p => !string.IsNullOrWhiteSpace(p))
-        .Distinct().OrderBy(p => p).ToList();
+    // Provinces list: for users, only their assigned ones; for admin, all
+    var provinces = (userProvinces.Count > 0 ? userProvinces :
+        DatabaseHelper.GetAllProperties()
+            .Select(p => p.Province).Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct().OrderBy(p => p).ToList())
+        .OrderBy(p => p).ToList();
 
     var total = all.Count;
     var items = all.Skip((page - 1) * pageSize).Take(pageSize).Select(p => new
@@ -204,42 +330,32 @@ app.MapGet("/api/properties", (
 }).RequireAuthorization();
 
 // ── API: Locations ────────────────────────────────────────────────────────────
-string LocationsPath() => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "locations.json");
-
 app.MapGet("/api/locations", () =>
 {
-    var json = File.ReadAllText(LocationsPath());
-    var data = JsonConvert.DeserializeObject<LocationData>(json);
-    return Results.Ok(data?.Locations ?? new List<Location>());
-}).RequireAuthorization();
+    return Results.Ok(DatabaseHelper.GetAllLocations());
+}).RequireAuthorization("AdminOnly");
 
 app.MapPost("/api/locations", async (HttpContext ctx) =>
 {
     var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
-    var loc = JsonConvert.DeserializeObject<Location>(body);
-    if (loc == null || string.IsNullOrWhiteSpace(loc.Name) || string.IsNullOrWhiteSpace(loc.Url))
-        return Results.BadRequest(new { error = "Name y Url son obligatorios" });
+    JObject data;
+    try { data = JObject.Parse(body); } catch { return Results.BadRequest(new { error = "JSON inválido" }); }
 
-    var path = LocationsPath();
-    var json = File.ReadAllText(path);
-    var data = JsonConvert.DeserializeObject<LocationData>(json) ?? new LocationData();
-    data.Locations.Add(loc);
-    File.WriteAllText(path, JsonConvert.SerializeObject(data, Formatting.Indented));
-    return Results.Ok(data.Locations);
-}).RequireAuthorization();
+    var name    = data["name"]?.ToString();
+    var url     = data["url"]?.ToString();
+    var rentUrl = data["rentUrl"]?.ToString();
 
-app.MapDelete("/api/locations/{index:int}", (int index) =>
+    var (ok, error, _) = DatabaseHelper.AddLocation(name ?? "", url ?? "", rentUrl);
+    if (!ok) return Results.BadRequest(new { error });
+    return Results.Ok(DatabaseHelper.GetAllLocations());
+}).RequireAuthorization("AdminOnly");
+
+app.MapDelete("/api/locations/{id:int}", (int id) =>
 {
-    var path = LocationsPath();
-    var json = File.ReadAllText(path);
-    var data = JsonConvert.DeserializeObject<LocationData>(json) ?? new LocationData();
-    if (index < 0 || index >= data.Locations.Count)
-        return Results.BadRequest(new { error = "Índice fuera de rango" });
-
-    data.Locations.RemoveAt(index);
-    File.WriteAllText(path, JsonConvert.SerializeObject(data, Formatting.Indented));
-    return Results.Ok(data.Locations);
-}).RequireAuthorization();
+    var (ok, error) = DatabaseHelper.DeleteLocation(id);
+    if (!ok) return Results.BadRequest(new { error });
+    return Results.Ok(DatabaseHelper.GetAllLocations());
+}).RequireAuthorization("AdminOnly");
 
 // ── API: Settings ─────────────────────────────────────────────────────────────
 string AppSettingsPath() => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
@@ -250,12 +366,11 @@ app.MapGet("/api/settings", () =>
     var doc = JObject.Parse(json);
     var result = new JObject
     {
-        ["scraper"]   = doc["ScraperSettings"]   ?? new JObject(),
-        ["email"]     = doc["EmailSettings"]     ?? new JObject(),
-        ["dashboard"] = doc["DashboardSettings"] ?? new JObject()
+        ["scraper"] = doc["ScraperSettings"] ?? new JObject(),
+        ["email"]   = doc["EmailSettings"]   ?? new JObject()
     };
     return Results.Content(result.ToString(Formatting.None), "application/json");
-}).RequireAuthorization();
+}).RequireAuthorization("AdminOnly");
 
 app.MapPut("/api/settings", async (HttpContext ctx) =>
 {
@@ -273,9 +388,6 @@ app.MapPut("/api/settings", async (HttpContext ctx) =>
     if (incoming["email"] is JObject emailIn)
         MergeInto(existing["EmailSettings"] as JObject ?? new JObject(), emailIn,
                   j => existing["EmailSettings"] = j);
-    if (incoming["dashboard"] is JObject dashIn)
-        MergeInto(existing["DashboardSettings"] as JObject ?? new JObject(), dashIn,
-                  j => existing["DashboardSettings"] = j);
 
     File.WriteAllText(path, existing.ToString(Formatting.Indented));
     return Results.Ok(new { message = "Configuración guardada correctamente" });
@@ -292,7 +404,7 @@ app.MapPut("/api/settings", async (HttpContext ctx) =>
         }
         assign(target);
     }
-}).RequireAuthorization();
+}).RequireAuthorization("AdminOnly");
 
 app.Run();
 

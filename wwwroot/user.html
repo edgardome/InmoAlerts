@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexumLabs – Propiedades</title>
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Light mode (default) ── */
+:root {
+  --bg:       #f5f7fa;
+  --surface:  #ffffff;
+  --border:   #e1e4e8;
+  --text:     #1c2128;
+  --muted:    #6e7781;
+  --blue:     #0969da;
+  --green:    #1a7f37;
+  --red:      #cf222e;
+  --yellow:   #9a6700;
+  --orange:   #bc4c00;
+  --purple:   #8250df;
+  --radius:   10px;
+  --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+}
+
+/* ── Dark mode ── */
+html.dark {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --border:   #30363d;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --blue:     #58a6ff;
+  --green:    #3fb950;
+  --red:      #f85149;
+  --yellow:   #d29922;
+  --orange:   #e3b341;
+  --purple:   #bc8cff;
+  --shadow:   0 1px 3px rgba(0,0,0,.4);
+}
+
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; transition: background .2s, color .2s; }
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { cursor: pointer; border: none; outline: none; border-radius: 6px; font-size: 13px; font-weight: 600; padding: 7px 16px; transition: opacity .15s; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button:not(:disabled):hover { opacity: .85; }
+
+/* ── Layout ── */
+.navbar { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; height: 52px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); }
+.navbar-brand { font-size: 1rem; font-weight: 700; color: var(--blue); display: flex; align-items: center; gap: 8px; }
+.navbar-right { display: flex; align-items: center; gap: 12px; }
+.navbar-right .muted { color: var(--muted); font-size: .8rem; }
+
+.btn-theme { background: transparent; border: none; padding: 4px 6px; font-size: 16px; color: var(--muted); border-radius: 6px; line-height: 1; transition: color .15s, background .15s; }
+.btn-theme:hover { background: var(--border); color: var(--text); }
+
+.main { padding: 20px; display: grid; gap: 16px; }
+
+/* ── Cards ── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.card-title { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+
+/* ── Buttons ── */
+.btn-secondary { background: var(--border); color: var(--text); }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-icon { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; font-size: 12px; }
+.btn-icon:not(:disabled):hover { border-color: var(--text); color: var(--text); }
+.btn-save { background: var(--blue); color: #fff; padding: 9px 24px; font-size: .9rem; }
+
+/* ── Stats ── */
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.stat-label { font-size: .7rem; color: var(--muted); margin-bottom: 4px; }
+.stat-value { font-size: 1.1rem; font-weight: 700; }
+.stat-value.blue  { color: var(--blue); }
+.stat-value.green { color: var(--green); }
+
+/* ── Vendor / listing badges ── */
+.vendor-badge { font-size: .7rem; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+.vendor-particular { background: #dafbe1; color: #1a7f37; border: 1px solid #aceebb; }
+.vendor-profesional { background: #ddf4ff; color: #0969da; border: 1px solid #aadcf9; }
+.vendor-banco       { background: #fff3cd; color: #9a6700; border: 1px solid #f5c518; }
+html.dark .vendor-particular { background: #122d1f; color: #3fb950; border-color: #1a4d2e; }
+html.dark .vendor-profesional{ background: #1a2a40; color: #58a6ff; border-color: #1f3d6e; }
+html.dark .vendor-banco      { background: #2d1a1a; color: #e3b341; border-color: #5c3030; }
+.listing-venta    { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.7rem; font-weight:700; background:#d1fadf; color:#1a7f37; border:1px solid #6fdd8b; }
+.listing-alquiler { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.7rem; font-weight:700; background:#ddf4ff; color:#0969da; border:1px solid #aadcf9; }
+html.dark .listing-venta    { background:#0d2e1a; color:#3fb950; border-color:#1a7f37; }
+html.dark .listing-alquiler { background:#0d1f35; color:#58a6ff; border-color:#1f3d6e; }
+
+/* ── Preferences ── */
+.prefs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.pref-toggle-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.pref-toggle-row label:not(.switch) { font-size: .88rem; font-weight: 600; cursor: pointer; flex: 1; }
+.pref-toggle-row .toggle-desc { font-size: .75rem; color: var(--muted); }
+.switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border); transition: .2s; border-radius: 22px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background: white; transition: .2s; border-radius: 50%; }
+input:checked + .slider { background: var(--green); }
+input:checked + .slider:before { transform: translateX(16px); }
+
+.pref-field { display: flex; flex-direction: column; gap: 4px; }
+.pref-field label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.pref-field input, .pref-field select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: .88rem; outline: none; width: 100%; }
+.pref-field input:focus, .pref-field select:focus { border-color: var(--blue); }
+.prefs-save-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+
+/* ── Properties Table ── */
+.table-wrap { overflow-x: auto; }
+.props-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.props-table th { background: var(--bg); color: var(--muted); text-transform: uppercase; font-size: .65rem; letter-spacing: .06em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+.props-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.props-table tr:hover td { background: var(--bg); }
+.price-cell { font-weight: 700; color: var(--green); white-space: nowrap; }
+.id-cell { font-family: monospace; color: var(--muted); font-size: 11px; }
+.desc-cell { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+
+/* ── Search / Filter ── */
+.search-row { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+.search-row input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 12px; font-size: 13px; outline: none; flex: 1; min-width: 160px; }
+.search-row input:focus { border-color: var(--blue); }
+.filter-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-row select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 10px; font-size: 12px; outline: none; cursor: pointer; }
+.filter-row select:focus { border-color: var(--blue); }
+.filter-row input[type="number"] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 10px; font-size: 12px; outline: none; width: 100px; }
+.filter-row input[type="number"]:focus { border-color: var(--blue); }
+.filter-row .filter-sep { color: var(--muted); font-size: 11px; }
+.filter-active select, .filter-active input { border-color: var(--blue); background: #ddf4ff; color: #0969da; }
+html.dark .filter-active select, html.dark .filter-active input { background: #0d1f35; color: #58a6ff; }
+
+/* ── Pagination ── */
+.pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; flex-wrap: wrap; gap: 8px; }
+.pagination .info { color: var(--muted); font-size: .8rem; }
+.page-btns { display: flex; gap: 6px; }
+
+/* ── Toast ── */
+.toast-wrap { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
+.toast { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: .85rem; min-width: 200px; box-shadow: var(--shadow); animation: slideIn .2s ease; }
+.toast.ok  { border-color: var(--green); color: var(--green); }
+.toast.err { border-color: var(--red);   color: var(--red); }
+@keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* ── Last Lead ── */
+.last-lead { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+.last-lead-info .prop-title { font-size: 1rem; font-weight: 700; color: var(--blue); margin-bottom: 4px; }
+.last-lead-info .prop-meta  { color: var(--muted); font-size: .8rem; margin-bottom: 2px; }
+.last-lead-info .prop-price { font-size: 1.2rem; font-weight: 700; color: var(--green); }
+.last-lead-empty { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="navbar-brand"><img src="/logo.png" alt="Logo" style="height:32px;object-fit:contain;"> NexumLabs</div>
+  <div class="navbar-right">
+    <span class="muted" id="nav-user">👤 Usuario</span>
+    <button class="btn-theme" id="btn-theme" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
+    <form method="post" action="/logout" style="margin:0">
+      <button type="submit" class="btn-icon">Cerrar sesión</button>
+    </form>
+  </div>
+</nav>
+
+<div class="main">
+
+  <!-- Stats rápidas -->
+  <div class="card">
+    <div class="card-title">Resumen</div>
+    <div class="status-grid">
+      <div class="stat-box">
+        <div class="stat-label">Propiedades disponibles</div>
+        <div class="stat-value blue" id="stat-total">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Última actualización</div>
+        <div class="stat-value" style="font-size:.85rem" id="stat-lastrun">Nunca</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Estado del sistema</div>
+        <div class="stat-value" id="stat-running" style="font-size:.85rem;color:var(--muted)">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Última propiedad encontrada -->
+  <div class="card">
+    <div class="card-title">Última Propiedad Encontrada</div>
+    <div id="last-lead-empty" class="last-lead-empty">Sin datos aún...</div>
+    <div id="last-lead-data" class="last-lead" style="display:none">
+      <div class="last-lead-info">
+        <div style="margin-bottom:5px"><span id="ll-listing-badge"></span></div>
+        <div class="prop-title" id="ll-title"></div>
+        <div class="prop-meta" id="ll-location"></div>
+        <div class="prop-meta" id="ll-vendor"></div>
+        <div class="prop-meta" style="margin-top:4px" id="ll-desc"></div>
+      </div>
+      <div style="text-align:right">
+        <div class="prop-price" id="ll-price"></div>
+        <a id="ll-url" href="#" target="_blank" style="font-size:.75rem;display:block;margin-top:6px">Ver en Idealista →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mis Preferencias -->
+  <div class="card">
+    <div class="card-title">⚙️ Mis Preferencias</div>
+    <div class="prefs-grid" style="margin-bottom:12px">
+      <!-- Tipos de alerta -->
+      <div class="pref-toggle-row">
+        <div style="flex:1">
+          <div><label for="pref-venta" style="cursor:pointer">Inmuebles en Venta</label></div>
+          <div class="toggle-desc">Mostrar propiedades en venta</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="pref-venta" onchange="savePrefs()">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="pref-toggle-row">
+        <div style="flex:1">
+          <div><label for="pref-alquiler" style="cursor:pointer">Inmuebles en Alquiler</label></div>
+          <div class="toggle-desc">Mostrar propiedades en alquiler</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="pref-alquiler" onchange="savePrefs()">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="prefs-grid">
+      <div class="pref-field">
+        <label>Precio mínimo (€)</label>
+        <input type="number" id="pref-min-price" placeholder="Sin mínimo" min="0" oninput="savePrefs()">
+      </div>
+      <div class="pref-field">
+        <label>Precio máximo (€)</label>
+        <input type="number" id="pref-max-price" placeholder="Sin máximo" min="0" oninput="savePrefs()">
+      </div>
+    </div>
+    <div class="prefs-save-row">
+      <button class="btn-save" onclick="applyPrefsToFilters()">🔍 Aplicar preferencias</button>
+      <span id="pref-save-status" style="font-size:.82rem;color:var(--green)"></span>
+    </div>
+  </div>
+
+  <!-- Emails de Alerta -->
+  <div class="card">
+    <div class="card-title">✉️ Mis Emails de Alerta</div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Recibirás las alertas de nuevas propiedades en estos correos.</div>
+    <div id="my-emails-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;min-height:28px"></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="email" id="my-email-input" placeholder="nuevo@email.com"
+        style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:.85rem;outline:none;flex:1;min-width:200px"
+        onkeydown="if(event.key==='Enter'){addMyEmail();event.preventDefault();}">
+      <button class="btn-secondary btn-sm" onclick="addMyEmail()">+ Añadir</button>
+      <button class="btn-save btn-sm" onclick="saveMyEmails()">💾 Guardar</button>
+    </div>
+    <div id="my-emails-status" style="font-size:.8rem;color:var(--green);margin-top:6px;height:16px"></div>
+  </div>
+
+  <!-- Propiedades -->
+  <div class="card">
+    <div class="card-title">🏠 Propiedades</div>
+    <div class="search-row">
+      <input type="text" id="prop-search" placeholder="🔍 Buscar por título, ubicación, descripción..." oninput="debounceSearch()" />
+      <button class="btn-secondary btn-sm" onclick="resetFilters()">✕ Limpiar</button>
+      <span id="prop-total" style="color:var(--muted);font-size:.8rem;white-space:nowrap"></span>
+    </div>
+    <div class="filter-row">
+      <select id="flt-listing" onchange="loadProperties(1)" title="Tipo de operación">
+        <option value="">🏷 Todos los tipos</option>
+        <option value="Venta">🏷 Venta</option>
+        <option value="Alquiler">🏠 Alquiler</option>
+      </select>
+      <select id="flt-province" onchange="loadProperties(1)" title="Provincia">
+        <option value="">📍 Todas las provincias</option>
+      </select>
+      <span class="filter-sep">Precio:</span>
+      <input type="number" id="flt-min-price" placeholder="Mín €" min="0" oninput="debounceSearch()" title="Precio mínimo">
+      <span class="filter-sep">—</span>
+      <input type="number" id="flt-max-price" placeholder="Máx €" min="0" oninput="debounceSearch()" title="Precio máximo">
+    </div>
+    <div class="table-wrap">
+      <table class="props-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Tipo</th>
+            <th>Título</th>
+            <th>Ubicación</th>
+            <th>Precio</th>
+            <th>Vendedor</th>
+            <th>Descripción</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="props-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <span class="info" id="page-info"></span>
+      <div class="page-btns">
+        <button class="btn-secondary btn-sm" id="btn-prev" onclick="changePage(-1)" disabled>‹ Anterior</button>
+        <button class="btn-secondary btn-sm" id="btn-next" onclick="changePage(1)"  disabled>Siguiente ›</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentPage   = 1;
+const pageSize    = 50;
+let searchTimeout = null;
+let statusInterval = null;
+
+// ── Preferences (localStorage) ────────────────────────────────────────────────
+function loadPrefs() {
+  const raw = localStorage.getItem('user_prefs');
+  const defaults = { venta: true, alquiler: true, minPrice: '', maxPrice: '' };
+  try { return Object.assign(defaults, JSON.parse(raw || '{}')); }
+  catch { return defaults; }
+}
+
+function savePrefs() {
+  const prefs = {
+    venta:    document.getElementById('pref-venta').checked,
+    alquiler: document.getElementById('pref-alquiler').checked,
+    minPrice: document.getElementById('pref-min-price').value,
+    maxPrice: document.getElementById('pref-max-price').value,
+  };
+  localStorage.setItem('user_prefs', JSON.stringify(prefs));
+  const el = document.getElementById('pref-save-status');
+  el.textContent = '✓ Preferencias guardadas';
+  setTimeout(() => { el.textContent = ''; }, 2000);
+}
+
+function applyPrefsToFilters() {
+  const prefs = loadPrefs();
+  document.getElementById('flt-listing').value   = prefs.venta && prefs.alquiler ? '' : prefs.venta ? 'Venta' : prefs.alquiler ? 'Alquiler' : '';
+  document.getElementById('flt-min-price').value = prefs.minPrice || '';
+  document.getElementById('flt-max-price').value = prefs.maxPrice || '';
+  loadProperties(1);
+  toast('Preferencias aplicadas ✓', 'ok');
+}
+
+function renderPrefsUI() {
+  const prefs = loadPrefs();
+  document.getElementById('pref-venta').checked    = prefs.venta !== false;
+  document.getElementById('pref-alquiler').checked = prefs.alquiler !== false;
+  document.getElementById('pref-min-price').value  = prefs.minPrice || '';
+  document.getElementById('pref-max-price').value  = prefs.maxPrice || '';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'dark') {
+    document.documentElement.classList.add('dark');
+    document.getElementById('btn-theme').textContent = '☀️';
+  }
+  renderPrefsUI();
+  loadMyEmails();
+  fetch('/api/me').then(r => r.ok ? r.json() : null).then(d => {
+    if (d) document.getElementById('nav-user').textContent = '👤 ' + d.username;
+  }).catch(() => {});
+  pollStatus();
+  statusInterval = setInterval(pollStatus, 8000);
+  applyPrefsToFilters();
+});
+
+// ── Alert emails ──────────────────────────────────────────────────────────────
+let _myEmails = [];
+
+async function loadMyEmails() {
+  try {
+    const r = await fetch('/api/me/emails');
+    if (!r.ok) return;
+    _myEmails = await r.json();
+    renderMyEmails();
+  } catch {}
+}
+
+function renderMyEmails() {
+  const el = document.getElementById('my-emails-list');
+  if (!el) return;
+  if (_myEmails.length === 0) {
+    el.innerHTML = '<span style="font-size:.8rem;color:var(--muted);font-style:italic">Sin emails configurados</span>';
+    return;
+  }
+  el.innerHTML = _myEmails.map((e, i) => `
+    <span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:.8rem">
+      ${esc(e)}
+      <button onclick="removeMyEmail(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:0;line-height:1" title="Quitar">✕</button>
+    </span>`).join('');
+}
+
+function addMyEmail() {
+  const input = document.getElementById('my-email-input');
+  const val   = input.value.trim().toLowerCase();
+  if (!val || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) { toast('Email inválido', 'err'); return; }
+  if (_myEmails.includes(val)) { toast('Ya está en la lista', 'err'); return; }
+  _myEmails.push(val);
+  input.value = '';
+  renderMyEmails();
+}
+
+function removeMyEmail(idx) {
+  _myEmails.splice(idx, 1);
+  renderMyEmails();
+}
+
+async function saveMyEmails() {
+  try {
+    const r = await fetch('/api/me/emails', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_myEmails)
+    });
+    if (r.ok) {
+      _myEmails = await r.json();
+      renderMyEmails();
+      const st = document.getElementById('my-emails-status');
+      st.textContent = '✓ Emails guardados';
+      setTimeout(() => { st.textContent = ''; }, 2500);
+    } else {
+      let errMsg = `Error ${r.status}`;
+      try { const j = await r.json(); errMsg = j.error || errMsg; } catch {}
+      toast(errMsg, 'err');
+    }
+  } catch (e) { toast('Error de conexión: ' + e.message, 'err'); }
+}
+
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  document.getElementById('btn-theme').textContent = isDark ? '☀️' : '🌙';
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+}
+
+// ── Status polling ─────────────────────────────────────────────────────────────
+async function pollStatus() {
+  try {
+    const r = await fetch('/api/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    document.getElementById('stat-running').textContent  = s.isRunning ? '🟢 Activo' : '⚫ Detenido';
+    document.getElementById('stat-running').style.color  = s.isRunning ? 'var(--green)' : 'var(--muted)';
+    document.getElementById('stat-lastrun').textContent  = s.lastRunTime ?? 'Nunca';
+
+    if (s.lastProperty) {
+      const p = s.lastProperty;
+      document.getElementById('last-lead-empty').style.display = 'none';
+      document.getElementById('last-lead-data').style.display  = 'grid';
+      const isAlquiler = p.listingType === 'Alquiler';
+      document.getElementById('ll-listing-badge').innerHTML =
+        `<span class="listing-${isAlquiler ? 'alquiler' : 'venta'}">${isAlquiler ? '🏠 ALQUILER' : '🏷 VENTA'}</span>`;
+      document.getElementById('ll-title').textContent    = p.title;
+      document.getElementById('ll-location').textContent = '📍 ' + [p.location, p.province].filter(Boolean).join(', ');
+      const vtype = p.isBank ? 'banco' : p.isProfessional ? 'profesional' : 'particular';
+      const vtext = p.isBank ? '🏦 Banco' : p.isProfessional ? '💼 Profesional' : '👤 Particular';
+      document.getElementById('ll-vendor').innerHTML =
+        `<span class="vendor-badge vendor-${vtype}">${vtext}</span>`;
+      const desc = p.description?.length > 120 ? p.description.slice(0, 117) + '…' : p.description;
+      document.getElementById('ll-desc').textContent = '📝 ' + (desc || '');
+      const priceLabel = isAlquiler
+        ? (p.price?.toLocaleString('es') ?? '—') + ' ' + (p.currency ?? '€') + '/mes'
+        : (p.price?.toLocaleString('es') ?? '—') + ' ' + (p.currency ?? '€');
+      document.getElementById('ll-price').textContent = priceLabel;
+      const urlEl = document.getElementById('ll-url');
+      urlEl.href = p.url;
+      urlEl.style.display = p.url ? '' : 'none';
+    }
+  } catch {}
+}
+
+// ── Properties ────────────────────────────────────────────────────────────────
+async function loadProperties(page = 1) {
+  currentPage = page;
+  const search   = document.getElementById('prop-search')?.value.trim() || '';
+  const listing  = document.getElementById('flt-listing')?.value || '';
+  const province = document.getElementById('flt-province')?.value || '';
+  const minPrice = document.getElementById('flt-min-price')?.value || '';
+  const maxPrice = document.getElementById('flt-max-price')?.value || '';
+
+  const params = new URLSearchParams({ page, pageSize });
+  if (search)   params.set('search', search);
+  if (listing)  params.set('listingType', listing);
+  if (province) params.set('province', province);
+  if (minPrice) params.set('minPrice', minPrice);
+  if (maxPrice) params.set('maxPrice', maxPrice);
+
+  ['flt-listing','flt-province'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('filter-active', !!el.value);
+  });
+  ['flt-min-price','flt-max-price'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('filter-active', !!el.value);
+  });
+
+  try {
+    const r = await fetch('/api/properties?' + params.toString());
+    const d = await r.json();
+    renderProperties(d);
+    updateProvinceSelects(d.provinces);
+    document.getElementById('stat-total').textContent = (d.total ?? 0).toLocaleString('es');
+  } catch {}
+}
+
+function renderProperties(d) {
+  const tbody = document.getElementById('props-tbody');
+  const items = d.items || [];
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Sin resultados</td></tr>';
+  } else {
+    tbody.innerHTML = items.map(p => {
+      const vtype = p.isBank ? 'banco' : p.isProfessional ? 'profesional' : 'particular';
+      const vtext = p.isBank ? '🏦 Banco' : p.isProfessional ? '💼 Prof.' : '👤 Part.';
+      const desc  = p.description?.length > 60 ? p.description.slice(0, 57) + '…' : (p.description || '');
+      const isAlquiler = p.listingType === 'Alquiler';
+      const listingBadge = `<span class="listing-${isAlquiler ? 'alquiler' : 'venta'}">${isAlquiler ? 'Alquiler' : 'Venta'}</span>`;
+      const priceStr = isAlquiler
+        ? (p.price||0).toLocaleString('es') + ' ' + (p.currency||'€') + '/mes'
+        : (p.price||0).toLocaleString('es') + ' ' + (p.currency||'€');
+      return `<tr>
+        <td class="id-cell">${esc(p.id)}</td>
+        <td>${listingBadge}</td>
+        <td><a href="${esc(p.url)}" target="_blank" title="${esc(p.title)}">${esc(p.title?.slice(0,50) || '')}</a></td>
+        <td>${esc([p.location, p.province].filter(Boolean).join(', '))}</td>
+        <td class="price-cell">${priceStr}</td>
+        <td><span class="vendor-badge vendor-${vtype}">${vtext}</span></td>
+        <td class="desc-cell" title="${esc(p.description||'')}">${esc(desc)}</td>
+        <td><a href="${esc(p.url)}" target="_blank" class="btn-icon btn-sm">↗</a></td>
+      </tr>`;
+    }).join('');
+  }
+
+  const total    = d.total || 0;
+  const from     = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const to       = Math.min(currentPage * pageSize, total);
+  const maxPages = Math.ceil(total / pageSize);
+
+  document.getElementById('prop-total').textContent = `${total.toLocaleString('es')} propiedades`;
+  document.getElementById('page-info').textContent  = total > 0 ? `${from}–${to} de ${total.toLocaleString('es')}` : '';
+  document.getElementById('btn-prev').disabled = currentPage <= 1;
+  document.getElementById('btn-next').disabled = currentPage >= maxPages;
+}
+
+function updateProvinceSelects(provinces) {
+  if (!provinces) return;
+  const fltSel = document.getElementById('flt-province');
+  const fltCurrent = fltSel.value;
+  while (fltSel.options.length > 1) fltSel.remove(1);
+  provinces.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p; o.textContent = '📍 ' + p;
+    fltSel.appendChild(o);
+  });
+  fltSel.value = fltCurrent;
+}
+
+function changePage(delta) { loadProperties(currentPage + delta); }
+
+function debounceSearch() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => loadProperties(1), 400);
+}
+
+function resetFilters() {
+  document.getElementById('prop-search').value   = '';
+  document.getElementById('flt-listing').value   = '';
+  document.getElementById('flt-province').value  = '';
+  document.getElementById('flt-min-price').value = '';
+  document.getElementById('flt-max-price').value = '';
+  loadProperties(1);
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const wrap = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

@@ -146,9 +146,19 @@ html.dark .loc-item.active { background: #0d1f35; }
 .page-btns { display: flex; gap: 6px; }
 
 /* ── Search row ── */
-.search-row { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+.search-row { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
 .search-row input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 12px; font-size: 13px; outline: none; flex: 1; min-width: 160px; }
 .search-row input:focus { border-color: var(--blue); }
+
+/* ── Filter row ── */
+.filter-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-row select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 10px; font-size: 12px; outline: none; cursor: pointer; }
+.filter-row select:focus { border-color: var(--blue); }
+.filter-row input[type="number"] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 10px; font-size: 12px; outline: none; width: 100px; }
+.filter-row input[type="number"]:focus { border-color: var(--blue); }
+.filter-row .filter-sep { color: var(--muted); font-size: 11px; }
+.filter-active select, .filter-active input { border-color: var(--blue); background: #ddf4ff; color: #0969da; }
+html.dark .filter-active select, html.dark .filter-active input { background: #0d1f35; color: #58a6ff; }
 
 /* ── Tabs ── */
 .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; gap: 2px; }
@@ -164,7 +174,34 @@ html.dark .loc-item.active { background: #0d1f35; }
 html.dark .listing-venta    { background:#0d1f35; color:#58a6ff; border-color:#1f3d6e; }
 html.dark .listing-alquiler { background:#1e0a40; color:#bc8cff; border-color:#4c1d95; }
 
-/* ── Toast ── */
+/* ── Settings tab ── */
+.settings-section { margin-bottom: 24px; }
+.settings-section-title { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--blue); margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.settings-field { display: flex; flex-direction: column; gap: 4px; }
+.settings-field label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.settings-field input[type="text"],
+.settings-field input[type="number"],
+.settings-field input[type="password"],
+.settings-field input[type="email"],
+.settings-field input[type="url"] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: .88rem; outline: none; width: 100%; }
+.settings-field input:focus { border-color: var(--blue); }
+.settings-toggle-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.settings-toggle-row label:not(.switch) { font-size: .88rem; font-weight: 600; cursor: pointer; }
+.settings-toggle-row .toggle-desc { font-size: .75rem; color: var(--muted); }
+/* Toggle switch */
+.switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border); transition: .2s; border-radius: 22px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background: white; transition: .2s; border-radius: 50%; }
+input:checked + .slider { background: var(--green); }
+input:checked + .slider:before { transform: translateX(16px); }
+.recipients-list { display: flex; flex-direction: column; gap: 6px; }
+.recipient-item { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: .85rem; }
+.recipient-item span { flex: 1; }
+.settings-save-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.btn-save { background: var(--blue); color: #fff; padding: 9px 24px; font-size: .9rem; }
+
 .toast-wrap { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
 .toast { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: .85rem; min-width: 200px; box-shadow: var(--shadow); animation: slideIn .2s ease; }
 .toast.ok   { border-color: var(--green); color: var(--green); }
@@ -253,6 +290,7 @@ html.dark .listing-alquiler { background:#1e0a40; color:#bc8cff; border-color:#4
       <div class="tab active" onclick="switchTab('tab-monitor', this)">📊 Monitor</div>
       <div class="tab"        onclick="switchTab('tab-locations', this)">📍 Ubicaciones</div>
       <div class="tab"        onclick="switchTab('tab-props', this)">🏠 Propiedades</div>
+      <div class="tab"        onclick="switchTab('tab-settings', this)">⚙️ Configuración</div>
     </div>
 
     <!-- Monitor tab -->
@@ -299,9 +337,29 @@ html.dark .listing-alquiler { background:#1e0a40; color:#bc8cff; border-color:#4
     <!-- Properties tab -->
     <div class="tab-panel" id="tab-props">
       <div class="search-row">
-        <input type="text" id="prop-search" placeholder="Buscar por título, ubicación..." oninput="debounceSearch()" />
-        <button class="btn-secondary btn-sm" onclick="loadProperties(1)">🔍 Buscar</button>
-        <span class="info" id="prop-total" style="color:var(--muted);font-size:.8rem"></span>
+        <input type="text" id="prop-search" placeholder="🔍 Buscar por título, ubicación, descripción..." oninput="debounceSearch()" />
+        <button class="btn-secondary btn-sm" onclick="resetFilters()">✕ Limpiar</button>
+        <span id="prop-total" style="color:var(--muted);font-size:.8rem;white-space:nowrap"></span>
+      </div>
+      <div class="filter-row">
+        <select id="flt-listing" onchange="loadProperties(1)" title="Tipo de operación">
+          <option value="">🏷 Todos los tipos</option>
+          <option value="Venta">🏷 Venta</option>
+          <option value="Alquiler">🏠 Alquiler</option>
+        </select>
+        <select id="flt-vendor" onchange="loadProperties(1)" title="Tipo de vendedor">
+          <option value="">👤 Todos los vendedores</option>
+          <option value="particular">👤 Particular</option>
+          <option value="profesional">💼 Profesional</option>
+          <option value="banco">🏦 Banco</option>
+        </select>
+        <select id="flt-province" onchange="loadProperties(1)" title="Provincia">
+          <option value="">📍 Todas las provincias</option>
+        </select>
+        <span class="filter-sep">Precio:</span>
+        <input type="number" id="flt-min-price" placeholder="Mín €" min="0" oninput="debounceSearch()" title="Precio mínimo">
+        <span class="filter-sep">—</span>
+        <input type="number" id="flt-max-price" placeholder="Máx €" min="0" oninput="debounceSearch()" title="Precio máximo">
       </div>
       <div class="table-wrap">
         <table class="props-table">
@@ -326,6 +384,116 @@ html.dark .listing-alquiler { background:#1e0a40; color:#bc8cff; border-color:#4
           <button class="btn-secondary btn-sm" id="btn-prev" onclick="changePage(-1)" disabled>‹ Anterior</button>
           <button class="btn-secondary btn-sm" id="btn-next" onclick="changePage(1)"  disabled>Siguiente ›</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Settings tab -->
+    <div class="tab-panel" id="tab-settings">
+
+      <!-- Alertas -->
+      <div class="settings-section">
+        <div class="settings-section-title">🔔 Alertas</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="settings-toggle-row">
+            <div style="flex:1">
+              <div><label for="cfg-alert-venta" style="cursor:pointer">Alertas de Venta</label></div>
+              <div class="toggle-desc">Activa el scraping y notificaciones por email para inmuebles en venta</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="cfg-alert-venta">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="settings-toggle-row">
+            <div style="flex:1">
+              <div><label for="cfg-alert-alquiler" style="cursor:pointer">Alertas de Alquiler</label></div>
+              <div class="toggle-desc">Activa el scraping y notificaciones por email para inmuebles en alquiler</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="cfg-alert-alquiler">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scraper -->
+      <div class="settings-section">
+        <div class="settings-section-title">⏱ Scraper</div>
+        <div class="settings-grid">
+          <div class="settings-field">
+            <label>Minutos entre ciclos</label>
+            <input type="number" id="cfg-minutes-cycles" min="1" max="1440" placeholder="5">
+          </div>
+          <div class="settings-field">
+            <label>Delay entre peticiones (ms)</label>
+            <input type="number" id="cfg-delay-requests" min="500" max="30000" placeholder="2000">
+          </div>
+          <div class="settings-field">
+            <label>Máximo de reintentos</label>
+            <input type="number" id="cfg-max-retries" min="0" max="10" placeholder="3">
+          </div>
+          <div class="settings-field">
+            <label>Timeout (segundos)</label>
+            <input type="number" id="cfg-timeout" min="5" max="120" placeholder="30">
+          </div>
+        </div>
+      </div>
+
+      <!-- Email -->
+      <div class="settings-section">
+        <div class="settings-section-title">📧 Email (SMTP)</div>
+        <div class="settings-grid">
+          <div class="settings-field">
+            <label>Servidor SMTP</label>
+            <input type="text" id="cfg-smtp-server" placeholder="smtp.gmail.com">
+          </div>
+          <div class="settings-field">
+            <label>Puerto</label>
+            <input type="number" id="cfg-smtp-port" min="1" max="65535" placeholder="587">
+          </div>
+          <div class="settings-field">
+            <label>Usuario SMTP</label>
+            <input type="text" id="cfg-smtp-user" placeholder="usuario@gmail.com">
+          </div>
+          <div class="settings-field">
+            <label>Contraseña SMTP</label>
+            <input type="password" id="cfg-smtp-pass" placeholder="••••••••">
+          </div>
+          <div class="settings-field">
+            <label>Dirección remitente (From)</label>
+            <input type="email" id="cfg-from-email" placeholder="alertas@tudominio.com">
+          </div>
+        </div>
+        <div style="margin-top:14px">
+          <div style="font-size:.78rem;color:var(--muted);font-weight:600;margin-bottom:8px">DESTINATARIOS</div>
+          <div class="recipients-list" id="cfg-recipients-list"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input type="email" id="cfg-recipient-new" placeholder="nuevo@email.com" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:.88rem;outline:none;flex:1">
+            <button class="btn-start btn-sm" onclick="addRecipient()">+ Añadir</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard -->
+      <div class="settings-section">
+        <div class="settings-section-title">🔐 Dashboard (Acceso)</div>
+        <div class="settings-grid">
+          <div class="settings-field">
+            <label>Usuario</label>
+            <input type="text" id="cfg-dash-user" placeholder="admin">
+          </div>
+          <div class="settings-field">
+            <label>Nueva contraseña</label>
+            <input type="password" id="cfg-dash-pass" placeholder="••••••••">
+          </div>
+        </div>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:8px">⚠ Tras cambiar las credenciales se cerrará la sesión.</p>
+      </div>
+
+      <div class="settings-save-row">
+        <button class="btn-save" onclick="saveSettings()">💾 Guardar configuración</button>
+        <span id="cfg-save-status" style="font-size:.82rem;color:var(--muted)"></span>
       </div>
     </div>
 
@@ -442,7 +610,7 @@ function updateStatusUI(s) {
     document.getElementById('ll-listing-badge').innerHTML =
       `<span class="listing-${isAlquiler ? 'alquiler' : 'venta'}">${isAlquiler ? '🏠 ALQUILER' : '🏷 VENTA'}</span>`;
     document.getElementById('ll-title').textContent    = p.title;
-    document.getElementById('ll-location').textContent = '📍 ' + p.location + ', ' + p.province;
+    document.getElementById('ll-location').textContent = '📍 ' + [p.location, p.province].filter(Boolean).join(', ');
     const vtype = p.isBank ? 'banco' : p.isProfessional ? 'profesional' : 'particular';
     const vtext = p.isBank ? '🏦 Banco' : p.isProfessional ? '💼 Profesional' : '👤 Particular';
     document.getElementById('ll-vendor').innerHTML = `<span class="vendor-badge vendor-${vtype}">${vtext}</span> <span style="color:var(--muted);font-size:.75rem">ID: ${p.id}</span>`;
@@ -551,12 +719,37 @@ async function deleteLocation(index) {
 // ── Properties ────────────────────────────────────────────────────────────────
 async function loadProperties(page = 1) {
   currentPage = page;
-  const search = document.getElementById('prop-search')?.value.trim() || '';
-  const url = `/api/properties?page=${page}&pageSize=${pageSize}` + (search ? `&search=${encodeURIComponent(search)}` : '');
+  const search   = document.getElementById('prop-search')?.value.trim() || '';
+  const listing  = document.getElementById('flt-listing')?.value || '';
+  const vendor   = document.getElementById('flt-vendor')?.value || '';
+  const province = document.getElementById('flt-province')?.value || '';
+  const minPrice = document.getElementById('flt-min-price')?.value || '';
+  const maxPrice = document.getElementById('flt-max-price')?.value || '';
+
+  const params = new URLSearchParams({ page, pageSize });
+  if (search)   params.set('search', search);
+  if (listing)  params.set('listingType', listing);
+  if (vendor)   params.set('vendorType', vendor);
+  if (province) params.set('province', province);
+  if (minPrice) params.set('minPrice', minPrice);
+  if (maxPrice) params.set('maxPrice', maxPrice);
+
+  // Highlight active filters
+  ['flt-listing','flt-vendor','flt-province'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.parentElement.classList.toggle('filter-active', !!el.value);
+    if (el) el.classList.toggle('filter-active', !!el.value);
+  });
+  ['flt-min-price','flt-max-price'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('filter-active', !!el.value);
+  });
+
   try {
-    const r = await fetch(url);
+    const r = await fetch('/api/properties?' + params.toString());
     const d = await r.json();
     renderProperties(d);
+    updateProvinceFilter(d.provinces);
   } catch {}
 }
 
@@ -579,7 +772,7 @@ function renderProperties(d) {
         <td class="id-cell">${esc(p.id)}</td>
         <td>${listingBadge}</td>
         <td><a href="${esc(p.url)}" target="_blank" title="${esc(p.title)}">${esc(p.title?.slice(0,50) || '')}</a></td>
-        <td>${esc(p.location)}, ${esc(p.province)}</td>
+        <td>${esc([p.location, p.province].filter(Boolean).join(', '))}</td>
         <td class="price-cell">${priceStr}</td>
         <td><span class="vendor-badge vendor-${vtype}">${vtext}</span></td>
         <td class="desc-cell" title="${esc(p.description||'')}">${esc(desc)}</td>
@@ -608,14 +801,40 @@ function debounceSearch() {
   searchTimeout = setTimeout(() => loadProperties(1), 400);
 }
 
+function resetFilters() {
+  document.getElementById('prop-search').value   = '';
+  document.getElementById('flt-listing').value   = '';
+  document.getElementById('flt-vendor').value    = '';
+  document.getElementById('flt-province').value  = '';
+  document.getElementById('flt-min-price').value = '';
+  document.getElementById('flt-max-price').value = '';
+  loadProperties(1);
+}
+
+function updateProvinceFilter(provinces) {
+  if (!provinces) return;
+  const sel = document.getElementById('flt-province');
+  const current = sel.value;
+  // Keep first option, replace the rest
+  while (sel.options.length > 1) sel.remove(1);
+  provinces.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = '📍 ' + p;
+    sel.appendChild(opt);
+  });
+  sel.value = current; // restore selection if still valid
+}
+
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 function switchTab(id, el) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   el.classList.add('active');
-  if (id === 'tab-props') loadProperties(1);
+  if (id === 'tab-props')     loadProperties(1);
   if (id === 'tab-locations') loadLocations();
+  if (id === 'tab-settings')  loadSettings();
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -626,6 +845,137 @@ function toast(msg, type = 'ok') {
   el.textContent = msg;
   wrap.appendChild(el);
   setTimeout(() => el.remove(), 3500);
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+let _cfgRecipients = [];
+
+async function loadSettings() {
+  try {
+    const r = await fetch('/api/settings');
+    if (!r.ok) return;
+    const d = await r.json();
+
+    // Scraper
+    const sc = d.scraper || {};
+    document.getElementById('cfg-minutes-cycles').value   = sc.MinutesBetweenCycles ?? sc.minutesBetweenCycles ?? 5;
+    document.getElementById('cfg-delay-requests').value   = sc.DelayBetweenRequests ?? sc.delayBetweenRequests ?? 2000;
+    document.getElementById('cfg-max-retries').value      = sc.MaxRetries ?? sc.maxRetries ?? 3;
+    document.getElementById('cfg-timeout').value          = sc.TimeoutSeconds ?? sc.timeoutSeconds ?? 30;
+    document.getElementById('cfg-alert-venta').checked    = (sc.AlertVenta    ?? sc.alertVenta)    !== false;
+    document.getElementById('cfg-alert-alquiler').checked = (sc.AlertAlquiler ?? sc.alertAlquiler) !== false;
+
+    // Email
+    const em = d.email || {};
+    document.getElementById('cfg-smtp-server').value = em.SmtpServer  ?? em.smtpServer  ?? '';
+    document.getElementById('cfg-smtp-port').value   = em.Port        ?? em.port        ?? 587;
+    document.getElementById('cfg-smtp-user').value   = em.Username    ?? em.username    ?? '';
+    document.getElementById('cfg-smtp-pass').value   = em.Password    ?? em.password    ?? '';
+    document.getElementById('cfg-from-email').value  = em.FromEmail   ?? em.fromEmail   ?? '';
+    _cfgRecipients = Array.isArray(em.Recipients ?? em.recipients) ? [...(em.Recipients ?? em.recipients)] : [];
+    renderRecipients();
+
+    // Dashboard
+    const db = d.dashboard || {};
+    const dashUserEl = document.getElementById('cfg-dash-user');
+    const dbUser = db.Username ?? db.username ?? '';
+    dashUserEl.value = dbUser;
+    dashUserEl.dataset.original = dbUser;
+    document.getElementById('cfg-dash-pass').value = '';
+  } catch { toast('Error al cargar la configuración', 'err'); }
+}
+
+function renderRecipients() {
+  const el = document.getElementById('cfg-recipients-list');
+  if (!_cfgRecipients.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-style:italic;font-size:.82rem;padding:4px 0">Sin destinatarios</div>';
+    return;
+  }
+  el.innerHTML = _cfgRecipients.map((r, i) => `
+    <div class="recipient-item">
+      <span>${esc(r)}</span>
+      <button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="removeRecipient(${i})">✕</button>
+    </div>`).join('');
+}
+
+function addRecipient() {
+  const input = document.getElementById('cfg-recipient-new');
+  const email = input.value.trim();
+  if (!email || !email.includes('@')) { toast('Email inválido', 'err'); return; }
+  if (_cfgRecipients.includes(email)) { toast('Ya existe ese destinatario', 'err'); return; }
+  _cfgRecipients.push(email);
+  renderRecipients();
+  input.value = '';
+}
+
+function removeRecipient(index) {
+  _cfgRecipients.splice(index, 1);
+  renderRecipients();
+}
+
+async function saveSettings() {
+  const statusEl = document.getElementById('cfg-save-status');
+  statusEl.textContent = 'Guardando...';
+  statusEl.style.color = 'var(--muted)';
+
+  const dashPass = document.getElementById('cfg-dash-pass').value;
+  const dashUser = document.getElementById('cfg-dash-user').value.trim();
+
+  const payload = {
+    scraper: {
+      minutesBetweenCycles:  parseInt(document.getElementById('cfg-minutes-cycles').value) || 5,
+      delayBetweenRequests:  parseInt(document.getElementById('cfg-delay-requests').value) || 2000,
+      maxRetries:            parseInt(document.getElementById('cfg-max-retries').value) || 3,
+      timeoutSeconds:        parseInt(document.getElementById('cfg-timeout').value) || 30,
+      alertVenta:            document.getElementById('cfg-alert-venta').checked,
+      alertAlquiler:         document.getElementById('cfg-alert-alquiler').checked,
+    },
+    email: {
+      smtpServer: document.getElementById('cfg-smtp-server').value.trim(),
+      port:       parseInt(document.getElementById('cfg-smtp-port').value) || 587,
+      username:   document.getElementById('cfg-smtp-user').value.trim(),
+      password:   document.getElementById('cfg-smtp-pass').value,
+      fromEmail:  document.getElementById('cfg-from-email').value.trim(),
+      recipients: _cfgRecipients,
+    },
+    dashboard: {
+      username: dashUser || 'admin',
+      ...(dashPass ? { password: dashPass } : {}),
+    }
+  };
+
+  // Remove empty email password so it doesn't overwrite unnecessarily
+  if (!payload.email.password) delete payload.email.password;
+
+  try {
+    const r = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if (r.ok) {
+      toast('Configuración guardada ✓', 'ok');
+      statusEl.textContent = '✓ Guardado';
+      statusEl.style.color = 'var(--green)';
+      setTimeout(() => statusEl.textContent = '', 3000);
+      // If dashboard credentials changed, force logout
+      if (dashPass || (dashUser && dashUser !== document.getElementById('cfg-dash-user').dataset.original)) {
+        setTimeout(() => {
+          toast('Credenciales cambiadas. Cerrando sesión...', 'ok');
+          setTimeout(() => document.querySelector('form[action="/logout"]').submit(), 1500);
+        }, 500);
+      }
+    } else {
+      toast(j.error || 'Error al guardar', 'err');
+      statusEl.textContent = '✗ Error';
+      statusEl.style.color = 'var(--red)';
+    }
+  } catch {
+    toast('Error de conexión', 'err');
+    statusEl.textContent = '✗ Error';
+    statusEl.style.color = 'var(--red)';
+  }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

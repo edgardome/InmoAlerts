@@ -10,14 +10,16 @@ namespace Idealista.Services
     {
         private readonly ScraperState _state;
         private readonly LogService _log;
-        private readonly ScraperSettings _settings;
+        private readonly IOptionsMonitor<ScraperSettings> _settingsMonitor;
         private CancellationTokenSource? _scrapingCts;
 
-        public ScraperBackgroundService(ScraperState state, LogService log, IOptions<ScraperSettings> settings)
+        private ScraperSettings Settings => _settingsMonitor.CurrentValue;
+
+        public ScraperBackgroundService(ScraperState state, LogService log, IOptionsMonitor<ScraperSettings> settings)
         {
             _state = state;
             _log = log;
-            _settings = settings.Value;
+            _settingsMonitor = settings;
 
             ScraperHelper.OnNewPropertyFound = OnNewPropertyFound;
             ScraperHelper.OnPriceChanged = OnPriceChanged;
@@ -102,6 +104,11 @@ namespace Idealista.Services
                         if (!_state.IsRunning || ct.IsCancellationRequested) break;
 
                         // ── Venta ──────────────────────────────────────────────
+                        if (!Settings.AlertVenta)
+                        {
+                            _log.Log($"⏭ Venta omitida (alertas de venta desactivadas): {location.Name}");
+                        }
+                        else
                         try
                         {
                             _state.CurrentLocation = $"{location.Name} (Venta)";
@@ -122,7 +129,11 @@ namespace Idealista.Services
                         if (string.IsNullOrWhiteSpace(rentUrl))
                             rentUrl = DeriveRentUrl(location.Url);
 
-                        if (!string.IsNullOrWhiteSpace(rentUrl) && _state.IsRunning && !ct.IsCancellationRequested)
+                        if (!Settings.AlertAlquiler)
+                        {
+                            _log.Log($"⏭ Alquiler omitido (alertas de alquiler desactivadas): {location.Name}");
+                        }
+                        else if (!string.IsNullOrWhiteSpace(rentUrl) && _state.IsRunning && !ct.IsCancellationRequested)
                         {
                             try
                             {
@@ -163,7 +174,7 @@ namespace Idealista.Services
 
                     if (_state.IsRunning && !ct.IsCancellationRequested)
                     {
-                        int minutes = _settings.MinutesBetweenCycles > 0 ? _settings.MinutesBetweenCycles : 5;
+                        int minutes = Settings.MinutesBetweenCycles > 0 ? Settings.MinutesBetweenCycles : 5;
                         _state.NextCycleTime = DateTime.Now.AddMinutes(minutes);
                         _log.Log($"\n✓ Ciclo completado  –  Próximo ciclo en {minutes} minutos...\n");
                         await Task.Delay(TimeSpan.FromMinutes(minutes), ct);

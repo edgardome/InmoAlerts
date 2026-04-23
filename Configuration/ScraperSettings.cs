@@ -9,5 +9,7 @@
         public bool UseProxy { get; set; } = false;
         public string ProxyUrl { get; set; } = string.Empty;
         public int MinutesBetweenCycles { get; set; } = 5;
+        public bool AlertVenta { get; set; } = true;
+        public bool AlertAlquiler { get; set; } = true;
     }
 }

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -146,7 +147,14 @@ app.MapGet("/api/logs/stream", async (HttpContext ctx, LogService logService) =>
 }).RequireAuthorization();
 
 // ── API: Properties ───────────────────────────────────────────────────────────
-app.MapGet("/api/properties", (int page = 1, int pageSize = 50, string? search = null) =>
+app.MapGet("/api/properties", (
+    int page = 1, int pageSize = 50,
+    string? search = null,
+    string? listingType = null,
+    string? vendorType = null,
+    int? minPrice = null,
+    int? maxPrice = null,
+    string? province = null) =>
 {
     var all = DatabaseHelper.GetAllProperties();
 
@@ -156,9 +164,34 @@ app.MapGet("/api/properties", (int page = 1, int pageSize = 50, string? search =
         all = all.Where(p =>
             p.Title.ToLowerInvariant().Contains(s) ||
             p.Location.ToLowerInvariant().Contains(s) ||
-            p.Province.ToLowerInvariant().Contains(s)
+            p.Province.ToLowerInvariant().Contains(s) ||
+            p.Description.ToLowerInvariant().Contains(s)
         ).ToList();
     }
+
+    if (!string.IsNullOrWhiteSpace(listingType))
+        all = all.Where(p => p.ListingType.Equals(listingType, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    if (!string.IsNullOrWhiteSpace(vendorType))
+        all = vendorType.ToLower() switch
+        {
+            "banco"       => all.Where(p => p.IsBank).ToList(),
+            "profesional" => all.Where(p => p.IsProfessional && !p.IsBank).ToList(),
+            "particular"  => all.Where(p => !p.IsProfessional && !p.IsBank).ToList(),
+            _             => all
+        };
+
+    if (minPrice.HasValue)
+        all = all.Where(p => p.Price >= minPrice.Value).ToList();
+    if (maxPrice.HasValue)
+        all = all.Where(p => p.Price <= maxPrice.Value).ToList();
+
+    if (!string.IsNullOrWhiteSpace(province))
+        all = all.Where(p => p.Province.Equals(province, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    var provinces = DatabaseHelper.GetAllProperties()
+        .Select(p => p.Province).Where(p => !string.IsNullOrWhiteSpace(p))
+        .Distinct().OrderBy(p => p).ToList();
 
     var total = all.Count;
     var items = all.Skip((page - 1) * pageSize).Take(pageSize).Select(p => new
@@ -167,7 +200,7 @@ app.MapGet("/api/properties", (int page = 1, int pageSize = 50, string? search =
         p.Url, p.IsProfessional, p.IsBank, p.Description, p.ListingType
     });
 
-    return Results.Ok(new { total, page, pageSize, items });
+    return Results.Ok(new { total, page, pageSize, items, provinces });
 }).RequireAuthorization();
 
 // ── API: Locations ────────────────────────────────────────────────────────────
@@ -206,6 +239,59 @@ app.MapDelete("/api/locations/{index:int}", (int index) =>
     data.Locations.RemoveAt(index);
     File.WriteAllText(path, JsonConvert.SerializeObject(data, Formatting.Indented));
     return Results.Ok(data.Locations);
+}).RequireAuthorization();
+
+// ── API: Settings ─────────────────────────────────────────────────────────────
+string AppSettingsPath() => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+
+app.MapGet("/api/settings", () =>
+{
+    var json = File.ReadAllText(AppSettingsPath());
+    var doc = JObject.Parse(json);
+    var result = new JObject
+    {
+        ["scraper"]   = doc["ScraperSettings"]   ?? new JObject(),
+        ["email"]     = doc["EmailSettings"]     ?? new JObject(),
+        ["dashboard"] = doc["DashboardSettings"] ?? new JObject()
+    };
+    return Results.Content(result.ToString(Formatting.None), "application/json");
+}).RequireAuthorization();
+
+app.MapPut("/api/settings", async (HttpContext ctx) =>
+{
+    var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+    JObject incoming;
+    try { incoming = JObject.Parse(body); }
+    catch { return Results.BadRequest(new { error = "JSON inválido" }); }
+
+    var path = AppSettingsPath();
+    var existing = JObject.Parse(File.ReadAllText(path));
+
+    if (incoming["scraper"] is JObject scraperIn)
+        MergeInto(existing["ScraperSettings"] as JObject ?? new JObject(), scraperIn,
+                  j => existing["ScraperSettings"] = j);
+    if (incoming["email"] is JObject emailIn)
+        MergeInto(existing["EmailSettings"] as JObject ?? new JObject(), emailIn,
+                  j => existing["EmailSettings"] = j);
+    if (incoming["dashboard"] is JObject dashIn)
+        MergeInto(existing["DashboardSettings"] as JObject ?? new JObject(), dashIn,
+                  j => existing["DashboardSettings"] = j);
+
+    File.WriteAllText(path, existing.ToString(Formatting.Indented));
+    return Results.Ok(new { message = "Configuración guardada correctamente" });
+
+    static void MergeInto(JObject target, JObject source, Action<JObject> assign)
+    {
+        foreach (var prop in source.Properties())
+        {
+            // Match existing PascalCase key case-insensitively so we don't create duplicates
+            var existingKey = target.Properties()
+                .FirstOrDefault(p => string.Equals(p.Name, prop.Name, StringComparison.OrdinalIgnoreCase))
+                ?.Name ?? prop.Name;
+            target[existingKey] = prop.Value;
+        }
+        assign(target);
+    }
 }).RequireAuthorization();
 
 app.Run();

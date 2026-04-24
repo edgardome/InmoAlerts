@@ -81,7 +81,7 @@ namespace InmoAlerts.Helpers
                             
                             <div style='text-align: center; margin-top: 25px;'>
                                 <a href='{property.Url}' style='display: inline-block; padding: 12px 30px; background-color: {listingBadgeColor}; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;'>
-                                    Ver en Idealista
+                                    Ver propiedad
                                 </a>
                             </div>
                         </div>
@@ -160,7 +160,7 @@ namespace InmoAlerts.Helpers
 
                             <div style='text-align: center; margin-top: 25px;'>
                                 <a href='{property.Url}' style='display: inline-block; padding: 12px 30px; background-color: {changeColor}; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;'>
-                                    Ver en Idealista
+                                    Ver propiedad
                                 </a>
                             </div>
                         </div>

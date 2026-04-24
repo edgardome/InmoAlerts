@@ -1,7 +1,7 @@
-﻿using Idealista.Helpers;
-using Idealista.Models;
+﻿using InmoAlerts.Helpers;
+using InmoAlerts.Models;
 
-namespace Idealista.Services
+namespace InmoAlerts.Services
 {
     public class PropertyService
     {

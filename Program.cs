@@ -1,7 +1,7 @@
-using Idealista.Configuration;
-using Idealista.Helpers;
-using Idealista.Models;
-using Idealista.Services;
+using InmoAlerts.Configuration;
+using InmoAlerts.Helpers;
+using InmoAlerts.Models;
+using InmoAlerts.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -414,7 +414,7 @@ static string LoginHtml(string? error = null) => $@"<!DOCTYPE html>
 <head>
 <meta charset=""UTF-8"">
 <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-<title>NexumLabs – Login</title>
+<title>InmoAlerts – Login</title>
 <style>
   :root{{--bg:#f5f7fa;--surface:#ffffff;--border:#e1e4e8;--text:#1c2128;--muted:#6e7781;--blue:#0969da;--green:#238636;--red:#cf222e}}
   *{{box-sizing:border-box;margin:0;padding:0}}
@@ -435,7 +435,7 @@ static string LoginHtml(string? error = null) => $@"<!DOCTYPE html>
 <body>
 <div class=""card"">
   <div class=""logo-wrap""><img src=""/logo.png"" alt=""Logo"" onerror=""this.style.display='none'""></div>
-  <h1>NexumLabs</h1>
+  <h1>InmoAlerts</h1>
   <p class=""subtitle"">Alertas automáticas de propiedades</p>
   {(error != null ? $@"<div class=""error"">⚠ {error}</div>" : "")}
   <form method=""post"" action=""/login"">

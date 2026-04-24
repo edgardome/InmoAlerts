@@ -1,6 +1,6 @@
 ﻿using System.Threading.Channels;
 
-namespace Idealista.Services
+namespace InmoAlerts.Services
 {
     public class LogEntry
     {

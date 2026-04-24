@@ -1,9 +1,9 @@
-﻿using Idealista.Models;
+﻿using InmoAlerts.Models;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using System.Security.Cryptography;
 
-namespace Idealista.Helpers
+namespace InmoAlerts.Helpers
 {
     public static class DatabaseHelper
     {

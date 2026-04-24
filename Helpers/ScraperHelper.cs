@@ -1,6 +1,6 @@
-﻿// Idealista.Helpers/ScraperHelper.cs
-using Idealista.Configuration;
-using Idealista.Models;
+﻿// InmoAlerts.Helpers/ScraperHelper.cs
+using InmoAlerts.Configuration;
+using InmoAlerts.Models;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Configuration;
 using System.Text.RegularExpressions;
@@ -10,7 +10,7 @@ using System.Net;
 using Microsoft.Playwright;
 using System.Diagnostics;
 
-namespace Idealista.Helpers
+namespace InmoAlerts.Helpers
 {
     public static class ScraperHelper
     {

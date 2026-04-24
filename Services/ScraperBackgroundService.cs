@@ -1,9 +1,9 @@
-﻿using Idealista.Configuration;
-using Idealista.Helpers;
-using Idealista.Models;
+﻿using InmoAlerts.Configuration;
+using InmoAlerts.Helpers;
+using InmoAlerts.Models;
 using Microsoft.Extensions.Options;
 
-namespace Idealista.Services
+namespace InmoAlerts.Services
 {
     public class ScraperBackgroundService : BackgroundService
     {
@@ -26,7 +26,7 @@ namespace Idealista.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _log.Log("🚀 NexumLabs iniciado. Presiona Iniciar para comenzar.");
+            _log.Log("🚀 InmoAlerts iniciado. Presiona Iniciar para comenzar.");
 
             Helpers.DatabaseHelper.InitializeDatabase();
             _state.PropertyCount = Helpers.DatabaseHelper.GetPropertyCount();

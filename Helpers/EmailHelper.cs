@@ -1,11 +1,11 @@
 ﻿using System.Net;
 using System.Net.Mail;
 using System.Net.Mime;
-using Idealista.Configuration;
-using Idealista.Models;
+using InmoAlerts.Configuration;
+using InmoAlerts.Models;
 using Microsoft.Extensions.Configuration;
 
-namespace Idealista.Helpers
+namespace InmoAlerts.Helpers
 {
     public static class EmailHelper
     {
@@ -86,8 +86,8 @@ namespace Idealista.Helpers
                             </div>
                         </div>
                         <div style='text-align: center; margin-top: 20px; color: #6c757d; font-size: 0.85em; padding-top: 12px; border-top: 1px solid #e9ecef;'>
-                            <p style='margin: 0;'>NexumLabs · Alertas automáticas de propiedades</p>
-                            <p style='margin: 4px 0 0;'><a href='https://nexumlabs.es' style='color: #0969da; text-decoration: none;'>nexumlabs.es</a></p>
+                            <p style='margin: 0;'>InmoAlerts · Alertas automáticas de propiedades</p>
+                            <p style='margin: 4px 0 0;'></p>
                         </div>
                     </div>";
 
@@ -165,8 +165,8 @@ namespace Idealista.Helpers
                             </div>
                         </div>
                         <div style='text-align: center; margin-top: 20px; color: #6c757d; font-size: 0.85em; padding-top: 12px; border-top: 1px solid #e9ecef;'>
-                            <p style='margin: 0;'>NexumLabs · Alertas automáticas de propiedades</p>
-                            <p style='margin: 4px 0 0;'><a href='https://nexumlabs.es' style='color: #0969da; text-decoration: none;'>nexumlabs.es</a></p>
+                            <p style='margin: 0;'>InmoAlerts · Alertas automáticas de propiedades</p>
+                            <p style='margin: 4px 0 0;'></p>
                         </div>
                     </div>";
 

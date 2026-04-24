@@ -1,4 +1,4 @@
-﻿namespace Idealista.Configuration
+﻿namespace InmoAlerts.Configuration
 {
     public class ScraperSettings
     {

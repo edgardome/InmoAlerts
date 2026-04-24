@@ -1,9 +1,9 @@
-﻿using Idealista.Models;
+﻿using InmoAlerts.Models;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
-namespace Idealista.Helpers
+namespace InmoAlerts.Helpers
 {
     class Utils
     {

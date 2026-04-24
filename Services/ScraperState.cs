@@ -1,6 +1,6 @@
-﻿using Idealista.Models;
+﻿using InmoAlerts.Models;
 
-namespace Idealista.Services
+namespace InmoAlerts.Services
 {
     public class ScraperState
     {

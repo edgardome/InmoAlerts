@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Idealista.Models
+namespace InmoAlerts.Models
 {
     public class Location
     {

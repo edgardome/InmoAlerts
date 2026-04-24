@@ -1,4 +1,4 @@
-namespace Idealista.Models
+namespace InmoAlerts.Models
 {
     public class AppUser
     {

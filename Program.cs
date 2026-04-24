@@ -103,7 +103,9 @@ app.MapGet("/api/me", (HttpContext ctx) =>
         username,
         role             = ctx.User.IsInRole("admin") ? "admin" : "user",
         alertEmails      = user?.AlertEmails      ?? new List<string>(),
-        allowedProvinces = user?.AllowedProvinces ?? new List<string>()
+        allowedProvinces = user?.AllowedProvinces ?? new List<string>(),
+        alertVenta       = user?.AlertVenta    ?? true,
+        alertAlquiler    = user?.AlertAlquiler ?? true
     });
 }).RequireAuthorization();
 
@@ -111,7 +113,7 @@ app.MapGet("/api/me", (HttpContext ctx) =>
 app.MapGet("/api/users", () =>
 {
     var users = DatabaseHelper.GetAllUsers()
-        .Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.CreatedAt });
+        .Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.AlertVenta, u.AlertAlquiler, u.CreatedAt });
     return Results.Ok(users);
 }).RequireAuthorization("AdminOnly");
 
@@ -128,7 +130,7 @@ app.MapPost("/api/users", async (HttpContext ctx) =>
     var (ok, error) = DatabaseHelper.CreateUser(username ?? "", password ?? "", role);
     if (!ok) return Results.BadRequest(new { error });
 
-    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.CreatedAt });
+    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.AlertVenta, u.AlertAlquiler, u.CreatedAt });
     return Results.Ok(users);
 }).RequireAuthorization("AdminOnly");
 
@@ -141,14 +143,16 @@ app.MapPut("/api/users/{id:int}", async (HttpContext ctx, int id) =>
     var newUsername        = data["username"]?.ToString();
     var newPassword        = data["password"]?.ToString();
     var newRole            = data["role"]?.ToString();
-    var newAlertEmails     = data["alertEmails"]?.ToObject<List<string>>();
+    var newAlertEmails      = data["alertEmails"]?.ToObject<List<string>>();
     var newAllowedProvinces = data["allowedProvinces"]?.ToObject<List<string>>();
-    var currentUser        = ctx.User.Identity?.Name ?? "";
+    bool? newAlertVenta     = data.ContainsKey("alertVenta")    ? (bool?)data["alertVenta"]!.ToObject<bool>()    : null;
+    bool? newAlertAlquiler  = data.ContainsKey("alertAlquiler") ? (bool?)data["alertAlquiler"]!.ToObject<bool>() : null;
+    var currentUser         = ctx.User.Identity?.Name ?? "";
 
-    var (ok, error) = DatabaseHelper.UpdateUser(id, newUsername, newPassword, newRole, newAlertEmails, newAllowedProvinces, currentUser);
+    var (ok, error) = DatabaseHelper.UpdateUser(id, newUsername, newPassword, newRole, newAlertEmails, newAllowedProvinces, newAlertVenta, newAlertAlquiler, currentUser);
     if (!ok) return Results.BadRequest(new { error });
 
-    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.CreatedAt });
+    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.AlertVenta, u.AlertAlquiler, u.CreatedAt });
     return Results.Ok(users);
 }).RequireAuthorization("AdminOnly");
 
@@ -158,11 +162,11 @@ app.MapDelete("/api/users/{id:int}", (HttpContext ctx, int id) =>
     var (ok, error) = DatabaseHelper.DeleteUser(id, currentUser);
     if (!ok) return Results.BadRequest(new { error });
 
-    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.CreatedAt });
+    var users = DatabaseHelper.GetAllUsers().Select(u => new { u.Id, u.Username, u.Role, u.AlertEmails, u.AllowedProvinces, u.AlertVenta, u.AlertAlquiler, u.CreatedAt });
     return Results.Ok(users);
 }).RequireAuthorization("AdminOnly");
 
-// ── API: My alert emails (any authenticated user) ─────────────────────────────
+// ── API: My alert emails(any authenticated user) ─────────────────────────────
 app.MapGet("/api/me/emails", (HttpContext ctx) =>
 {
     var idClaim = ctx.User.FindFirst("userId")?.Value;
@@ -184,6 +188,24 @@ app.MapPut("/api/me/emails", async (HttpContext ctx) =>
     var (ok, error) = DatabaseHelper.UpdateUserEmails(userId, emails);
     if (!ok) return Results.BadRequest(new { error });
     return Results.Ok(DatabaseHelper.GetUserById(userId)?.AlertEmails ?? new List<string>());
+}).RequireAuthorization();
+
+app.MapPut("/api/me/preferences", async (HttpContext ctx) =>
+{
+    var idClaim = ctx.User.FindFirst("userId")?.Value;
+    if (!int.TryParse(idClaim, out int userId)) return Results.Unauthorized();
+
+    var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+    JObject data;
+    try { data = JObject.Parse(body); } catch { return Results.BadRequest(new { error = "JSON inválido" }); }
+
+    bool? alertVenta    = data.ContainsKey("alertVenta")    ? (bool?)data["alertVenta"]!.ToObject<bool>()    : null;
+    bool? alertAlquiler = data.ContainsKey("alertAlquiler") ? (bool?)data["alertAlquiler"]!.ToObject<bool>() : null;
+
+    var currentUser = ctx.User.Identity?.Name ?? "";
+    var (ok, error) = DatabaseHelper.UpdateUser(userId, null, null, null, null, null, alertVenta, alertAlquiler, currentUser);
+    if (!ok) return Results.BadRequest(new { error });
+    return Results.Ok();
 }).RequireAuthorization();
 
 // ── API: Status ───────────────────────────────────────────────────────────────
@@ -242,9 +264,8 @@ app.MapPost("/api/stop", async (ScraperBackgroundService scraper) =>
 // ── API: Logs SSE ─────────────────────────────────────────────────────────────
 app.MapGet("/api/logs/stream", async (HttpContext ctx, LogService logService) =>
 {
-    ctx.Response.Headers["Content-Type"]  = "text/event-stream";
-    ctx.Response.Headers["Cache-Control"] = "no-cache";
-    ctx.Response.Headers["Connection"]    = "keep-alive";
+    ctx.Response.Headers["Content-Type"]      = "text/event-stream";
+    ctx.Response.Headers["Cache-Control"]     = "no-cache";
     ctx.Response.Headers["X-Accel-Buffering"] = "no";
 
     var ct = ctx.RequestAborted;

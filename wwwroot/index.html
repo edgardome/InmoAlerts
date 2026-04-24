@@ -490,14 +490,6 @@ input:checked + .slider:before { transform: translateX(16px); }
             <input type="email" id="cfg-from-email" placeholder="alertas@tudominio.com">
           </div>
         </div>
-        <div style="margin-top:14px">
-          <div style="font-size:.78rem;color:var(--muted);font-weight:600;margin-bottom:8px">DESTINATARIOS</div>
-          <div class="recipients-list" id="cfg-recipients-list"></div>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <input type="email" id="cfg-recipient-new" placeholder="nuevo@email.com" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:.88rem;outline:none;flex:1">
-            <button class="btn-start btn-sm" onclick="addRecipient()">+ Añadir</button>
-          </div>
-        </div>
       </div>
 
       <div class="settings-save-row">
@@ -887,37 +879,12 @@ async function loadSettings() {
     document.getElementById('cfg-smtp-pass').value   = em.Password    ?? em.password    ?? '';
     document.getElementById('cfg-from-email').value  = em.FromEmail   ?? em.fromEmail   ?? '';
     _cfgRecipients = Array.isArray(em.Recipients ?? em.recipients) ? [...(em.Recipients ?? em.recipients)] : [];
-    renderRecipients();
   } catch { toast('Error al cargar la configuración', 'err'); }
 }
 
-function renderRecipients() {
-  const el = document.getElementById('cfg-recipients-list');
-  if (!_cfgRecipients.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-style:italic;font-size:.82rem;padding:4px 0">Sin destinatarios</div>';
-    return;
-  }
-  el.innerHTML = _cfgRecipients.map((r, i) => `
-    <div class="recipient-item">
-      <span>${esc(r)}</span>
-      <button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="removeRecipient(${i})">✕</button>
-    </div>`).join('');
-}
-
-function addRecipient() {
-  const input = document.getElementById('cfg-recipient-new');
-  const email = input.value.trim();
-  if (!email || !email.includes('@')) { toast('Email inválido', 'err'); return; }
-  if (_cfgRecipients.includes(email)) { toast('Ya existe ese destinatario', 'err'); return; }
-  _cfgRecipients.push(email);
-  renderRecipients();
-  input.value = '';
-}
-
-function removeRecipient(index) {
-  _cfgRecipients.splice(index, 1);
-  renderRecipients();
-}
+function renderRecipients() {}
+function addRecipient() {}
+function removeRecipient(index) {}
 
 async function saveSettings() {
   const statusEl = document.getElementById('cfg-save-status');
@@ -939,7 +906,6 @@ async function saveSettings() {
       username:   document.getElementById('cfg-smtp-user').value.trim(),
       password:   document.getElementById('cfg-smtp-pass').value,
       fromEmail:  document.getElementById('cfg-from-email').value.trim(),
-      recipients: _cfgRecipients,
     }
   };
 
@@ -989,17 +955,19 @@ async function loadUsers() {
   } catch {}
 }
 
-const _editEmailsMap      = {};
-const _editProvincesMap   = {};
+const _editEmailsMap        = {};
+const _editProvincesMap     = {};
 const _editProvincesAllMode = {};
-let   _allProvinces       = [];
+const _editAlertVenta       = {};
+const _editAlertAlquiler    = {};
+let   _allProvinces         = [];
 
 async function loadAllProvinces() {
   try {
-    const r = await fetch('/api/properties?pageSize=1');
+    const r = await fetch('/api/locations');
     if (!r.ok) return;
-    const d = await r.json();
-    _allProvinces = d.provinces || [];
+    const locs = await r.json();
+    _allProvinces = (locs || []).map(l => l.name);
     const dl = document.getElementById('provinces-datalist');
     if (dl) { dl.innerHTML = ''; _allProvinces.forEach(p => { const o = document.createElement('option'); o.value = p; dl.appendChild(o); }); }
   } catch {}
@@ -1032,6 +1000,8 @@ function renderUsers(users) {
     _editEmailsMap[u.id]       = [...(u.alertEmails      || [])];
     _editProvincesMap[u.id]    = [...(u.allowedProvinces || [])];
     _editProvincesAllMode[u.id] = (u.allowedProvinces || []).length === 0;
+    _editAlertVenta[u.id]      = u.alertVenta    !== false;
+    _editAlertAlquiler[u.id]   = u.alertAlquiler !== false;
 
     return `
     <div class="loc-item" id="user-row-${u.id}">
@@ -1075,6 +1045,21 @@ function renderUsers(users) {
             </button>
             <div id="prov-dropdown-${u.id}" style="display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.25)">
             </div>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:8px">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px;font-weight:600">🔔 Tipos de alerta</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem">
+              <input type="checkbox" id="edit-alert-venta-${u.id}" ${(u.alertVenta !== false) ? 'checked' : ''}
+                style="cursor:pointer;accent-color:var(--blue)">
+              🏷 Venta
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem">
+              <input type="checkbox" id="edit-alert-alquiler-${u.id}" ${(u.alertAlquiler !== false) ? 'checked' : ''}
+                style="cursor:pointer;accent-color:var(--purple,#8250df)">
+              🏠 Alquiler
+            </label>
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:4px">
@@ -1198,11 +1183,13 @@ async function saveUser(id) {
   const newRole           = document.getElementById(`edit-role-${id}`).value;
   const alertEmails       = _editEmailsMap[id]    || [];
   const allowedProvinces  = _editProvincesAllMode[id] ? [] : (_editProvincesMap[id] || []);
+  const alertVenta        = document.getElementById(`edit-alert-venta-${id}`)?.checked ?? true;
+  const alertAlquiler     = document.getElementById(`edit-alert-alquiler-${id}`)?.checked ?? true;
   try {
     const r = await fetch(`/api/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: newUsername, password: newPassword || undefined, role: newRole, alertEmails, allowedProvinces })
+      body: JSON.stringify({ username: newUsername, password: newPassword || undefined, role: newRole, alertEmails, allowedProvinces, alertVenta, alertAlquiler })
     });
     const j = await r.json();
     if (r.ok) { renderUsers(j); toast('Usuario actualizado ✓', 'ok'); }

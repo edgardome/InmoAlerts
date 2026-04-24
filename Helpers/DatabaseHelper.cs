@@ -116,11 +116,15 @@ namespace InmoAlerts.Helpers
                 using var reader = cmd.ExecuteReader();
                 bool hasAlertEmails = false;
                 bool hasAllowedProvinces = false;
+                bool hasAlertVenta = false;
+                bool hasAlertAlquiler = false;
                 while (reader.Read())
                 {
                     var col = reader.GetString(1);
                     if (col == "AlertEmails")      hasAlertEmails      = true;
                     if (col == "AllowedProvinces") hasAllowedProvinces = true;
+                    if (col == "AlertVenta")       hasAlertVenta       = true;
+                    if (col == "AlertAlquiler")    hasAlertAlquiler    = true;
                 }
                 reader.Close();
 
@@ -128,6 +132,10 @@ namespace InmoAlerts.Helpers
                     ExecuteNonQuery(connection, "ALTER TABLE Users ADD COLUMN AlertEmails TEXT NOT NULL DEFAULT '[]'");
                 if (!hasAllowedProvinces)
                     ExecuteNonQuery(connection, "ALTER TABLE Users ADD COLUMN AllowedProvinces TEXT NOT NULL DEFAULT '[]'");
+                if (!hasAlertVenta)
+                    ExecuteNonQuery(connection, "ALTER TABLE Users ADD COLUMN AlertVenta INTEGER NOT NULL DEFAULT 1");
+                if (!hasAlertAlquiler)
+                    ExecuteNonQuery(connection, "ALTER TABLE Users ADD COLUMN AlertAlquiler INTEGER NOT NULL DEFAULT 1");
             }
             catch (Exception ex)
             {
@@ -249,7 +257,7 @@ namespace InmoAlerts.Helpers
             connection.Open();
 
             using var cmd = new SqliteCommand(
-                "SELECT Id, Username, PasswordHash, Role, AlertEmails, AllowedProvinces, CreatedAt FROM Users WHERE Username = @u COLLATE NOCASE",
+                "SELECT Id, Username, PasswordHash, Role, AlertEmails, AllowedProvinces, CreatedAt, AlertVenta, AlertAlquiler FROM Users WHERE Username = @u COLLATE NOCASE",
                 connection);
             cmd.Parameters.AddWithValue("@u", username);
             using var reader = cmd.ExecuteReader();
@@ -267,7 +275,7 @@ namespace InmoAlerts.Helpers
             connection.Open();
 
             using var cmd = new SqliteCommand(
-                "SELECT Id, Username, PasswordHash, Role, AlertEmails, AllowedProvinces, CreatedAt FROM Users ORDER BY Id",
+                "SELECT Id, Username, PasswordHash, Role, AlertEmails, AllowedProvinces, CreatedAt, AlertVenta, AlertAlquiler FROM Users ORDER BY Id",
                 connection);
             using var reader = cmd.ExecuteReader();
             while (reader.Read()) users.Add(ReadUser(reader));
@@ -280,7 +288,7 @@ namespace InmoAlerts.Helpers
             connection.Open();
 
             using var cmd = new SqliteCommand(
-                "SELECT Id, Username, PasswordHash, Role, AlertEmails, AllowedProvinces, CreatedAt FROM Users WHERE Id = @id",
+                "SELECT Id, Username, PasswordHash, Role, AlertEmails, AllowedProvinces, CreatedAt, AlertVenta, AlertAlquiler FROM Users WHERE Id = @id",
                 connection);
             cmd.Parameters.AddWithValue("@id", id);
             using var reader = cmd.ExecuteReader();
@@ -311,7 +319,7 @@ namespace InmoAlerts.Helpers
             return (true, string.Empty);
         }
 
-        public static (bool ok, string error) UpdateUser(int id, string? newUsername, string? newPassword, string? newRole, List<string>? newAlertEmails, List<string>? newAllowedProvinces, string currentUsername)
+        public static (bool ok, string error) UpdateUser(int id, string? newUsername, string? newPassword, string? newRole, List<string>? newAlertEmails, List<string>? newAllowedProvinces, bool? newAlertVenta, bool? newAlertAlquiler, string currentUsername)
         {
             using var connection = new SqliteConnection(ConnectionString);
             connection.Open();
@@ -338,23 +346,27 @@ namespace InmoAlerts.Helpers
                     return (false, "Ya existe un usuario con ese nombre");
             }
 
-            var finalUsername = string.IsNullOrWhiteSpace(newUsername) ? user.Username : newUsername.Trim();
-            var finalHash     = string.IsNullOrWhiteSpace(newPassword)  ? user.PasswordHash : HashPassword(newPassword);
-            var finalRole     = string.IsNullOrWhiteSpace(newRole)      ? user.Role : newRole;
-            var finalEmails     = newAlertEmails != null
+            var finalUsername     = string.IsNullOrWhiteSpace(newUsername) ? user.Username : newUsername.Trim();
+            var finalHash         = string.IsNullOrWhiteSpace(newPassword)  ? user.PasswordHash : HashPassword(newPassword);
+            var finalRole         = string.IsNullOrWhiteSpace(newRole)      ? user.Role : newRole;
+            var finalEmails       = newAlertEmails != null
                 ? System.Text.Json.JsonSerializer.Serialize(newAlertEmails.Where(e => !string.IsNullOrWhiteSpace(e)).Distinct().ToList())
                 : System.Text.Json.JsonSerializer.Serialize(user.AlertEmails);
-            var finalProvinces  = newAllowedProvinces != null
+            var finalProvinces    = newAllowedProvinces != null
                 ? System.Text.Json.JsonSerializer.Serialize(newAllowedProvinces.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToList())
                 : System.Text.Json.JsonSerializer.Serialize(user.AllowedProvinces);
+            var finalAlertVenta    = newAlertVenta    ?? user.AlertVenta;
+            var finalAlertAlquiler = newAlertAlquiler ?? user.AlertAlquiler;
 
             using var updateCmd = new SqliteCommand(
-                "UPDATE Users SET Username = @u, PasswordHash = @p, Role = @r, AlertEmails = @e, AllowedProvinces = @ap WHERE Id = @id", connection);
+                "UPDATE Users SET Username = @u, PasswordHash = @p, Role = @r, AlertEmails = @e, AllowedProvinces = @ap, AlertVenta = @av, AlertAlquiler = @aa WHERE Id = @id", connection);
             updateCmd.Parameters.AddWithValue("@u",  finalUsername);
             updateCmd.Parameters.AddWithValue("@p",  finalHash);
             updateCmd.Parameters.AddWithValue("@r",  finalRole);
             updateCmd.Parameters.AddWithValue("@e",  finalEmails);
             updateCmd.Parameters.AddWithValue("@ap", finalProvinces);
+            updateCmd.Parameters.AddWithValue("@av", finalAlertVenta    ? 1 : 0);
+            updateCmd.Parameters.AddWithValue("@aa", finalAlertAlquiler ? 1 : 0);
             updateCmd.Parameters.AddWithValue("@id", id);
             updateCmd.ExecuteNonQuery();
             return (true, string.Empty);
@@ -399,7 +411,9 @@ namespace InmoAlerts.Helpers
                 Role             = r.GetString(3),
                 AlertEmails      = ParseJson(4),
                 AllowedProvinces = ParseJson(5),
-                CreatedAt        = r.IsDBNull(6) ? string.Empty : r.GetString(6)
+                CreatedAt        = r.IsDBNull(6) ? string.Empty : r.GetString(6),
+                AlertVenta       = r.IsDBNull(7) || r.GetInt32(7) != 0,
+                AlertAlquiler    = r.IsDBNull(8) || r.GetInt32(8) != 0,
             };
         }
 
@@ -436,6 +450,50 @@ namespace InmoAlerts.Helpers
                 catch { }
             }
             return all.ToList();
+        }
+
+        /// <summary>
+        /// Returns alert emails only for users who:
+        /// - Have no zone restriction or their zone matches the property's province/location
+        /// - Have the listing type (Venta/Alquiler) enabled in their preferences
+        /// </summary>
+        public static List<string> GetAlertEmailsForProperty(string province, string location, string listingType)
+        {
+            using var connection = new SqliteConnection(ConnectionString);
+            connection.Open();
+            using var cmd = new SqliteCommand("SELECT AlertEmails, AllowedProvinces, AlertVenta, AlertAlquiler FROM Users", connection);
+            using var reader = cmd.ExecuteReader();
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (reader.Read())
+            {
+                var emailsJson    = reader.IsDBNull(0) ? "[]" : reader.GetString(0);
+                var provincesJson = reader.IsDBNull(1) ? "[]" : reader.GetString(1);
+                var alertVenta    = reader.IsDBNull(2) || reader.GetInt32(2) != 0;
+                var alertAlquiler = reader.IsDBNull(3) || reader.GetInt32(3) != 0;
+                try
+                {
+                    // Check listing type preference
+                    bool typeAllowed = listingType.Equals("Alquiler", StringComparison.OrdinalIgnoreCase)
+                        ? alertAlquiler
+                        : alertVenta;
+                    if (!typeAllowed) continue;
+
+                    var emails    = System.Text.Json.JsonSerializer.Deserialize<List<string>>(emailsJson)    ?? new();
+                    var provinces = System.Text.Json.JsonSerializer.Deserialize<List<string>>(provincesJson) ?? new();
+
+                    // Empty AllowedProvinces = all zones
+                    bool zoneAllowed = provinces.Count == 0
+                        || provinces.Any(p =>
+                            p.Equals(province, StringComparison.OrdinalIgnoreCase) ||
+                            p.Equals(location, StringComparison.OrdinalIgnoreCase));
+
+                    if (zoneAllowed)
+                        foreach (var e in emails.Where(x => !string.IsNullOrWhiteSpace(x)))
+                            result.Add(e.Trim());
+                }
+                catch { }
+            }
+            return result.ToList();
         }
 
         // ── Locations CRUD ───────────────────────────────────────────────────────

@@ -323,22 +323,28 @@ const pageSize    = 50;
 let searchTimeout = null;
 let statusInterval = null;
 
-// ── Preferences (localStorage) ────────────────────────────────────────────────
+// ── Preferences (DB-backed) ───────────────────────────────────────────────────
+let _prefs = { venta: true, alquiler: true, minPrice: '', maxPrice: '' };
+
 function loadPrefs() {
-  const raw = localStorage.getItem('user_prefs');
-  const defaults = { venta: true, alquiler: true, minPrice: '', maxPrice: '' };
-  try { return Object.assign(defaults, JSON.parse(raw || '{}')); }
-  catch { return defaults; }
+  return _prefs;
 }
 
-function savePrefs() {
-  const prefs = {
-    venta:    document.getElementById('pref-venta').checked,
-    alquiler: document.getElementById('pref-alquiler').checked,
-    minPrice: document.getElementById('pref-min-price').value,
-    maxPrice: document.getElementById('pref-max-price').value,
-  };
-  localStorage.setItem('user_prefs', JSON.stringify(prefs));
+async function savePrefs() {
+  _prefs.venta    = document.getElementById('pref-venta').checked;
+  _prefs.alquiler = document.getElementById('pref-alquiler').checked;
+  _prefs.minPrice = document.getElementById('pref-min-price').value;
+  _prefs.maxPrice = document.getElementById('pref-max-price').value;
+  // persist minPrice/maxPrice locally only
+  localStorage.setItem('user_prefs_price', JSON.stringify({ minPrice: _prefs.minPrice, maxPrice: _prefs.maxPrice }));
+  // persist alert toggles in DB
+  try {
+    await fetch('/api/me/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alertVenta: _prefs.venta, alertAlquiler: _prefs.alquiler })
+    });
+  } catch {}
   const el = document.getElementById('pref-save-status');
   el.textContent = '✓ Preferencias guardadas';
   setTimeout(() => { el.textContent = ''; }, 2000);
@@ -354,11 +360,10 @@ function applyPrefsToFilters() {
 }
 
 function renderPrefsUI() {
-  const prefs = loadPrefs();
-  document.getElementById('pref-venta').checked    = prefs.venta !== false;
-  document.getElementById('pref-alquiler').checked = prefs.alquiler !== false;
-  document.getElementById('pref-min-price').value  = prefs.minPrice || '';
-  document.getElementById('pref-max-price').value  = prefs.maxPrice || '';
+  document.getElementById('pref-venta').checked    = _prefs.venta !== false;
+  document.getElementById('pref-alquiler').checked = _prefs.alquiler !== false;
+  document.getElementById('pref-min-price').value  = _prefs.minPrice || '';
+  document.getElementById('pref-max-price').value  = _prefs.maxPrice || '';
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -368,14 +373,22 @@ window.addEventListener('DOMContentLoaded', () => {
     document.documentElement.classList.add('dark');
     document.getElementById('btn-theme').textContent = '☀️';
   }
-  renderPrefsUI();
+  // restore price prefs from localStorage
+  try {
+    const priceRaw = localStorage.getItem('user_prefs_price');
+    if (priceRaw) { const p = JSON.parse(priceRaw); _prefs.minPrice = p.minPrice || ''; _prefs.maxPrice = p.maxPrice || ''; }
+  } catch {}
   loadMyEmails();
   fetch('/api/me').then(r => r.ok ? r.json() : null).then(d => {
-    if (d) document.getElementById('nav-user').textContent = '👤 ' + d.username;
-  }).catch(() => {});
+    if (!d) return;
+    document.getElementById('nav-user').textContent = '👤 ' + d.username;
+    _prefs.venta    = d.alertVenta    !== false;
+    _prefs.alquiler = d.alertAlquiler !== false;
+    renderPrefsUI();
+    applyPrefsToFilters();
+  }).catch(() => { renderPrefsUI(); applyPrefsToFilters(); });
   pollStatus();
   statusInterval = setInterval(pollStatus, 8000);
-  applyPrefsToFilters();
 });
 
 // ── Alert emails ──────────────────────────────────────────────────────────────

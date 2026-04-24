@@ -27,10 +27,10 @@ namespace InmoAlerts.Helpers
         {
             try
             {
-                var recipients = DatabaseHelper.GetAllAlertEmails();
+                var recipients = DatabaseHelper.GetAlertEmailsForProperty(property.Province, property.Location, property.ListingType);
                 if (recipients.Count == 0)
                 {
-                    Console.WriteLine("⚠️ No hay destinatarios de alertas configurados en ningún usuario");
+                    Console.WriteLine("⚠️ No hay destinatarios de alertas configurados para esta zona");
                     return;
                 }
 
@@ -111,7 +111,7 @@ namespace InmoAlerts.Helpers
         {
             try
             {
-                var recipients = DatabaseHelper.GetAllAlertEmails();
+                var recipients = DatabaseHelper.GetAlertEmailsForProperty(property.Province, property.Location, property.ListingType);
                 if (recipients.Count == 0) return;
 
                 using var smtpClient = new SmtpClient(_emailSettings.SmtpServer)

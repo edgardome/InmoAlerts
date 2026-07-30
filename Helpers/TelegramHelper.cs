@@ -15,8 +15,11 @@ namespace InmoAlerts.Helpers
 
         static TelegramHelper()
         {
+            var dataPath = Environment.GetEnvironmentVariable("DATA_PATH");
+            var configPath = !string.IsNullOrWhiteSpace(dataPath) ? dataPath : AppDomain.CurrentDomain.BaseDirectory;
+
             var configuration = new ConfigurationBuilder()
-                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .SetBasePath(configPath)
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .Build();
 

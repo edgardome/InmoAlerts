@@ -77,12 +77,9 @@ namespace InmoAlerts.Helpers
             {
                 _playwright = await Playwright.CreateAsync();
                 
-                var headless = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development" && 
-                               Environment.GetEnvironmentVariable("HEADLESS") != "false";
-
                 _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                 {
-                    Headless = headless,
+                    Headless = false,
                     Args = new[] 
                     { 
                         "--disable-blink-features=AutomationControlled",
@@ -90,6 +87,9 @@ namespace InmoAlerts.Helpers
                         "--disable-setuid-sandbox"
                     }
                 });
+
+                // Minimizar usando PowerShell en Windows para que no moleste visualmente
+                _ = Task.Run(() => MinimizeBrowserWindows());
             }
 
             if (_context == null)
@@ -115,6 +115,50 @@ namespace InmoAlerts.Helpers
                             originalQuery(parameters)
                     );
                 ");
+            }
+        }
+
+        private static void MinimizeBrowserWindows()
+        {
+            try
+            {
+                // Solo ejecutar en Windows
+                if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                    return;
+
+                // Esperar a que la ventana se cree
+                Thread.Sleep(3000);
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = @"-Command ""
+                        Add-Type @'
+                            using System;
+                            using System.Runtime.InteropServices;
+                            public class Win32 {
+                                [DllImport(""user32.dll"")]
+                                public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+                            }
+'@
+                        $processes = Get-Process | Where-Object {$_.ProcessName -like '*chrome*' -or $_.ProcessName -like '*msedge*'}
+                        foreach ($proc in $processes) {
+                            if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
+                                [Win32]::ShowWindow($proc.MainWindowHandle, 6) | Out-Null
+                            }
+                        }
+                    """,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+
+                Process.Start(psi);
+                Console.WriteLine("✓ Ventana del navegador minimizada (Modo local)");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠ No se pudo minimizar: {ex.Message}");
             }
         }
 

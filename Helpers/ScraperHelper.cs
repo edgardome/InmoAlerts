@@ -1,4 +1,4 @@
-﻿// InmoAlerts.Helpers/ScraperHelper.cs
+// InmoAlerts.Helpers/ScraperHelper.cs
 using InmoAlerts.Configuration;
 using InmoAlerts.Models;
 using HtmlAgilityPack;
@@ -18,8 +18,10 @@ namespace InmoAlerts.Helpers
         private static IPlaywright? _playwright;
         private static IBrowser? _browser;
         private static IBrowserContext? _context;
-        private static IPage? _mainPage;
         private static bool _browsersInstalled = false;
+
+        // Global semaphore to prevent multiple parallel scrapers from eating all RAM
+        private static readonly SemaphoreSlim _scrapeSemaphore = new SemaphoreSlim(1, 1);
 
         public static Action<Property>? OnNewPropertyFound { get; set; }
         public static Action<Property, int>? OnPriceChanged { get; set; } // (property, oldPrice)
@@ -27,6 +29,19 @@ namespace InmoAlerts.Helpers
         // Detects listing type from URL if not explicitly provided
         public static string DetectListingType(string url) =>
             url.Contains("alquiler", StringComparison.OrdinalIgnoreCase) ? "Alquiler" : "Venta";
+
+        /// <summary>
+        /// Appends ?ordenado-por=fecha-publicacion-desc (or &amp;...) to a URL so
+        /// Idealista returns the most recent listings first. This is the key optimisation
+        /// that enables early-stop: once we hit a known property we can break the loop.
+        /// </summary>
+        private static string AddSortByRecentSuffix(string url)
+        {
+            const string param = "ordenado-por=fecha-publicacion-desc";
+            if (url.Contains(param, StringComparison.OrdinalIgnoreCase))
+                return url; // already present
+            return url.Contains('?') ? $"{url}&{param}" : $"{url}?{param}";
+        }
 
         static ScraperHelper()
         {
@@ -61,18 +76,22 @@ namespace InmoAlerts.Helpers
             if (_playwright == null)
             {
                 _playwright = await Playwright.CreateAsync();
+                
+                // For production (e.g. Railway), headless must be true.
+                // Using false will crash without a display server.
+                var headless = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development" || 
+                               Environment.GetEnvironmentVariable("HEADLESS") != "false";
+
                 _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                 {
-                    Headless = false,
+                    Headless = headless,
                     Args = new[] 
                     { 
                         "--disable-blink-features=AutomationControlled",
-                        "--window-position=-2400,-2400" // Mover la ventana fuera de la pantalla
+                        "--no-sandbox", 
+                        "--disable-setuid-sandbox"
                     }
                 });
-
-                // Minimizar usando PowerShell
-                _ = Task.Run(() => MinimizeBrowserWindows());
             }
 
             if (_context == null)
@@ -85,88 +104,55 @@ namespace InmoAlerts.Helpers
                     JavaScriptEnabled = true
                 });
             }
-
-            if (_mainPage == null)
-            {
-                _mainPage = await _context.NewPageAsync();
-            }
-        }
-
-        private static void MinimizeBrowserWindows()
-        {
-            try
-            {
-                // Esperar a que la ventana se cree
-                Thread.Sleep(2000);
-
-                // Usar PowerShell para minimizar todas las ventanas de Chrome
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    Arguments = @"-Command ""
-                        Add-Type @'
-                            using System;
-                            using System.Runtime.InteropServices;
-                            public class Win32 {
-                                [DllImport(""user32.dll"")]
-                                public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-                                [DllImport(""user32.dll"")]
-                                public static extern bool SetForegroundWindow(IntPtr hWnd);
-                            }
-'@
-                        $processes = Get-Process | Where-Object {$_.ProcessName -like '*chrome*' -or $_.ProcessName -like '*msedge*'}
-                        foreach ($proc in $processes) {
-                            if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
-                                [Win32]::ShowWindow($proc.MainWindowHandle, 6) | Out-Null
-                            }
-                        }
-                    """,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                };
-
-                Process.Start(psi);
-                Console.WriteLine("✓ Ventana del navegador minimizada");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"⚠ No se pudo minimizar: {ex.Message}");
-            }
         }
 
         public static async Task<List<Property>> ScrapeProperties(Models.Location location, string? listingType = null)
         {
             listingType ??= DetectListingType(location.Url);
+
+            // Build the effective URL — add sort-by-recent if requested
+            string effectiveUrl = location.SortByRecent
+                ? AddSortByRecentSuffix(location.Url)
+                : location.Url;
+
             try
             {
-                if (string.IsNullOrEmpty(location.Url))
+                // Acquire semaphore to ensure only 1 browser tab works at a time
+                await _scrapeSemaphore.WaitAsync();
+
+                if (string.IsNullOrEmpty(effectiveUrl))
                     throw new ArgumentException("La URL no puede estar vacía", nameof(location.Url));
 
-                Console.WriteLine($"Iniciando scraping [{listingType}] de: {location.Url}");
+                Console.WriteLine($"Iniciando scraping [{listingType}] de: {effectiveUrl}");
                 var startTime = DateTime.Now;
 
-                var content = await ScrapeWithPlaywrightAsync(location.Url);
+                var content = await ScrapeWithPlaywrightAsync(effectiveUrl);
                 
                 var doc = new HtmlDocument();
                 doc.LoadHtml(content);
                 string name = location.Name;
 
                 var properties = new List<Property>();
-                var articles = doc.DocumentNode.SelectNodes("//article[contains(@class, 'item')]");
+                var articles   = doc.DocumentNode.SelectNodes("//article[contains(@class, 'item')]");
 
                 if (articles != null)
                 {
+                    bool earlyStop = false;
                     foreach (var article in articles)
                     {
+                        if (earlyStop) break;
                         try
                         {
                             await Task.Delay(TimeSpan.FromSeconds(2));
-                            var property = await ProcessArticle(article, name, listingType);
+                            var (property, alreadyKnown) = await ProcessArticle(article, location, listingType);
                             if (property != null)
-                            {
                                 properties.Add(property);
-                            }
+
+                            // Early-stop: list is ordered newest-first.
+                            // If this property was already in the DB it means everything
+                            // below it is even older — no point scraping further.
+                            if (alreadyKnown && location.SortByRecent)
+                                earlyStop = true;
                         }
                         catch (Exception ex)
                         {
@@ -185,12 +171,17 @@ namespace InmoAlerts.Helpers
                 Console.WriteLine($"Error en ScrapeProperties: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                _scrapeSemaphore.Release();
+            }
         }
 
         private static async Task<string> ScrapeWithPlaywrightAsync(string url, int maxRetries = 3)
         {
             for (int i = 0; i < maxRetries; i++)
             {
+                IPage? page = null;
                 try
                 {
                     if (i > 0)
@@ -201,30 +192,41 @@ namespace InmoAlerts.Helpers
 
                     await EnsureBrowserContextAsync();
 
-                    // Visita la página principal primero solo si es el primer intento
-                    if (i == 0)
-                    {
-                        Console.WriteLine("Visitando página principal de Idealista...");
-                        await _mainPage!.GotoAsync("https://www.idealista.com", new PageGotoOptions
-                        {
-                            WaitUntil = WaitUntilState.DOMContentLoaded,
-                            Timeout = 30000
-                        });
+                    page = await _context!.NewPageAsync();
 
-                        await _mainPage.WaitForTimeoutAsync(new Random().Next(2000, 4000));
-                    }
+                    // Block network assets (images, css, fonts) to save massive amounts of RAM and CPU
+                    await page.RouteAsync("**/*", async route =>
+                    {
+                        var t = route.Request.ResourceType;
+                        if (t == "image" || t == "stylesheet" || t == "font" || t == "media")
+                            await route.AbortAsync();
+                        else
+                            await route.ContinueAsync();
+                    });
 
                     // Navega a la URL objetivo
                     Console.WriteLine($"Navegando a: {url}");
-                    await _mainPage!.GotoAsync(url, new PageGotoOptions
+                    await page.GotoAsync(url, new PageGotoOptions
                     {
                         WaitUntil = WaitUntilState.DOMContentLoaded,
                         Timeout = 30000
                     });
 
-                    await _mainPage.WaitForTimeoutAsync(1000);
+                    await page.WaitForTimeoutAsync(1000);
 
-                    var html = await _mainPage.ContentAsync();
+                    // Hacer scroll suavemente para forzar la carga lazy de las imágenes y contenido
+                    await page.EvaluateAsync(@"
+                        async () => {
+                            for(let i = 0; i < document.body.scrollHeight; i += 100) {
+                                window.scrollTo(0, i);
+                                await new Promise(r => setTimeout(r, 10));
+                            }
+                        }
+                    ");
+
+                    await page.WaitForTimeoutAsync(1000);
+
+                    var html = await page.ContentAsync();
 
                     // Verificar si hay captcha
                     if (html.Contains("se ha bloqueado", StringComparison.OrdinalIgnoreCase))
@@ -244,12 +246,24 @@ namespace InmoAlerts.Helpers
                         throw new Exception($"Error después de {maxRetries} intentos: {ex.Message}", ex);
                     }
                 }
+                finally
+                {
+                    if (page != null)
+                    {
+                        await page.CloseAsync();
+                    }
+                }
             }
 
             throw new Exception("No se pudo completar el scraping");
         }
 
-        private static async Task<Property?> ProcessArticle(HtmlNode article, string location, string listingType)
+        /// <summary>
+        /// Processes one listing article. Returns the Property (or null) and a flag indicating
+        /// whether it was already known in the DB (used for early-stop when SortByRecent=true).
+        /// </summary>
+        private static async Task<(Property? property, bool alreadyKnown)> ProcessArticle(
+            HtmlNode article, Models.Location location, string listingType)
         {
             HtmlDocument articleDoc = new HtmlDocument();
             articleDoc.LoadHtml(article.InnerHtml);
@@ -263,16 +277,16 @@ namespace InmoAlerts.Helpers
             var content = await GetArticleDetailsAsync(url);
 
             var propertyJson = JsonConvert.DeserializeObject<JObject>(content);
-            if (propertyJson == null) return null;
+            if (propertyJson == null) return (null, false);
 
             var data = propertyJson["data"] as JObject;
-            if (data == null) return null;
+            if (data == null) return (null, false);
 
             property.IsProfessional = data["isAdProfessional"]?.ToObject<bool?>() ?? false;
             property.IsBank = data["agencyIsABank"]?.ToObject<bool?>() ?? false;
             property.Title = data["shortDescription"]?.ToString() ?? "";
             property.Location = data["micrositeCityName"]?.ToString() ?? "";
-            property.Province = location;
+            property.Province = location.Name;
             property.Currency = "€";
             property.ListingType = listingType;
 
@@ -289,26 +303,34 @@ namespace InmoAlerts.Helpers
 
             // Only process properties from private sellers (no agencies or banks)
             if (property.IsProfessional || property.IsBank)
-                return property;
+                return (property, DatabaseHelper.PropertyExists(property.Id));
 
             int? storedPrice = DatabaseHelper.GetPropertyPrice(property.Id);
 
             if (storedPrice == null)
             {
-                // New property
+                // New property — alert via email + Telegram
                 DatabaseHelper.InsertProperty(property);
                 await EmailHelper.SendPropertyEmail(property);
+                // Fire-and-forget Telegram to each chat ID configured for this location
+                var chatId = location.TelegramChatId;
+                await TelegramHelper.SendPropertyAlert(chatId, property);
                 OnNewPropertyFound?.Invoke(property);
+                return (property, false);
             }
             else if (storedPrice != property.Price && property.Price > 0)
             {
                 // Price changed — update DB and alert
                 DatabaseHelper.UpdatePropertyPrice(property.Id, property.Price);
                 await EmailHelper.SendPriceChangeEmail(property, storedPrice.Value);
+                var chatId = location.TelegramChatId;
+                await TelegramHelper.SendPriceChangeAlert(chatId, property, storedPrice.Value);
                 OnPriceChanged?.Invoke(property, storedPrice.Value);
+                return (property, false);
             }
 
-            return property;
+            // Property already in DB with same price — no change
+            return (property, true);
         }
 
         private static async Task<string> GetArticleDetailsAsync(string url, int maxRetries = 3)
@@ -392,11 +414,6 @@ namespace InmoAlerts.Helpers
 
         public static async Task DisposeAsync()
         {
-            if (_mainPage != null)
-            {
-                await _mainPage.CloseAsync();
-                _mainPage = null;
-            }
 
             if (_context != null)
             {

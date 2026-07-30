@@ -325,12 +325,19 @@ input:checked + .slider:before { transform: translateX(16px); }
       <div id="loc-list" class="loc-list"></div>
       <div class="loc-add-form" style="flex-direction:column;gap:6px">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input type="text" id="loc-name" placeholder="Nombre (ej: Madrid)" style="flex:1;min-width:120px" />
-          <input type="url"  id="loc-url"  placeholder="URL venta Idealista" style="flex:2;min-width:200px" />
+          <input type="text" id="loc-name" placeholder="Nombre (ej: Madrid Centro)" style="flex:1;min-width:120px" />
+          <input type="url"  id="loc-url"  placeholder="URL venta Idealista (con mapa si quieres zona)" style="flex:2;min-width:200px" />
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <input type="url"  id="loc-rent-url" placeholder="URL alquiler Idealista (opcional)" style="flex:3;min-width:200px" />
-          <button class="btn-start btn-sm" onclick="addLocation()">+ Añadir</button>
+          <input type="url"  id="loc-rent-url" placeholder="URL alquiler Idealista (opcional, se auto-deriva)" style="flex:3;min-width:200px" />
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--muted);white-space:nowrap">
+            ⏱ Intervalo (min):
+            <input type="number" id="loc-interval" value="2" min="1" max="60" style="width:70px" />
+          </label>
+          <input type="text" id="loc-telegram" placeholder="Chat ID Telegram (ej: -1001234567890)" style="flex:2;min-width:180px" title="ID del chat o grupo de Telegram donde llegar&aacute;n las alertas instant&aacute;neas. Obt&eacute;nlo llamando a /getUpdates en tu bot." />
+          <button class="btn-start btn-sm" onclick="addLocation()">+ Añadir zona</button>
         </div>
       </div>
     </div>
@@ -673,28 +680,38 @@ function renderLocations(locs) {
     const rentRow = l.rentUrl
       ? `<div class="loc-url" title="${esc(l.rentUrl)}" style="color:var(--purple,#8250df)">↳ alquiler: ${esc(l.rentUrl)}</div>`
       : '';
+    const intervalMin = l.scanIntervalMinutes ?? 2;
+    const tgBadge = l.telegramChatId
+      ? `<span style="background:#229ED9;color:#fff;border-radius:10px;padding:1px 7px;font-size:.72rem;margin-left:4px" title="Telegram: ${esc(l.telegramChatId)}">✈ Telegram</span>`
+      : '';
     return `
     <div class="loc-item" id="loc-${l.id}">
-      <div>
-        <div class="loc-name">${esc(l.name)} <span class="listing-venta" style="vertical-align:middle">🏷 venta</span>${rentBadge}</div>
+      <div style="flex:1;min-width:0">
+        <div class="loc-name">${esc(l.name)} <span class="listing-venta" style="vertical-align:middle">🏷 venta</span>${rentBadge}${tgBadge}</div>
         <div class="loc-url" title="${esc(l.url)}">${esc(l.url)}</div>
         ${rentRow}
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">⏱ Cada ${intervalMin} min · ${l.sortByRecent !== false ? '🆕 por reciente' : '📋 orden default'}</div>
       </div>
-      <button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteLocation(${l.id})">✕</button>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn-icon btn-sm" style="color:var(--blue);border-color:var(--blue)" onclick="editLocation(${l.id},${JSON.stringify(l).replace(/"/g,'&quot;')})">✏</button>
+        <button class="btn-icon btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteLocation(${l.id})">✕</button>
+      </div>
     </div>`;
   }).join('');
 }
 
 async function addLocation() {
-  const name    = document.getElementById('loc-name').value.trim();
-  const url     = document.getElementById('loc-url').value.trim();
-  const rentUrl = document.getElementById('loc-rent-url').value.trim() || undefined;
+  const name                = document.getElementById('loc-name').value.trim();
+  const url                 = document.getElementById('loc-url').value.trim();
+  const rentUrl             = document.getElementById('loc-rent-url').value.trim() || undefined;
+  const scanIntervalMinutes = parseInt(document.getElementById('loc-interval').value) || 2;
+  const telegramChatId      = document.getElementById('loc-telegram').value.trim() || undefined;
   if (!name || !url) { toast('Nombre y URL de venta son obligatorios', 'err'); return; }
   try {
     const r = await fetch('/api/locations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, url, rentUrl })
+      body: JSON.stringify({ name, url, rentUrl, scanIntervalMinutes, sortByRecent: true, telegramChatId })
     });
     if (r.ok) {
       const locs = await r.json();
@@ -702,11 +719,38 @@ async function addLocation() {
       document.getElementById('loc-name').value     = '';
       document.getElementById('loc-url').value      = '';
       document.getElementById('loc-rent-url').value = '';
-      toast('Ubicación añadida ✓', 'ok');
+      document.getElementById('loc-interval').value = '2';
+      document.getElementById('loc-telegram').value = '';
+      toast('Zona añadida ✓', 'ok');
     } else {
       const j = await r.json();
       toast(j.error || 'Error', 'err');
     }
+  } catch { toast('Error de conexión', 'err'); }
+}
+
+async function editLocation(id, loc) {
+  const name     = prompt('Nombre de la zona:', loc.name);
+  if (name === null) return;
+  const url      = prompt('URL de venta:', loc.url);
+  if (url === null) return;
+  const rentUrl  = prompt('URL de alquiler (vacío para auto-derivar):', loc.rentUrl ?? '');
+  const interval = parseInt(prompt('Intervalo de escaneo (minutos):', loc.scanIntervalMinutes ?? 2));
+  const telegram = prompt('Chat ID de Telegram (vacío para desactivar):', loc.telegramChatId ?? '');
+  try {
+    const r = await fetch(`/api/locations/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name, url,
+        rentUrl: rentUrl || undefined,
+        scanIntervalMinutes: isNaN(interval) ? 2 : interval,
+        sortByRecent: true,
+        telegramChatId: telegram || undefined
+      })
+    });
+    if (r.ok) { renderLocations(await r.json()); toast('Zona actualizada ✓', 'ok'); }
+    else { const j = await r.json(); toast(j.error || 'Error', 'err'); }
   } catch { toast('Error de conexión', 'err'); }
 }
 

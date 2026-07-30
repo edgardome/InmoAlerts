@@ -12,9 +12,28 @@ using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Persistent Configuration (Railway Volume) ──────────────────────────────────
+var dataPath = Environment.GetEnvironmentVariable("DATA_PATH");
+if (!string.IsNullOrWhiteSpace(dataPath))
+{
+    if (!Directory.Exists(dataPath)) Directory.CreateDirectory(dataPath);
+    
+    var externalSettings = Path.Combine(dataPath, "appsettings.json");
+    if (!File.Exists(externalSettings))
+    {
+        var defaultSettings = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+        if (File.Exists(defaultSettings))
+            File.Copy(defaultSettings, externalSettings);
+        else
+            File.WriteAllText(externalSettings, "{}");
+    }
+    builder.Configuration.AddJsonFile(externalSettings, optional: false, reloadOnChange: true);
+}
+
 // ── Configuration ────────────────────────────────────────────────────────────
 builder.Services.Configure<ScraperSettings>(builder.Configuration.GetSection("ScraperSettings"));
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.Configure<InmoAlerts.Configuration.TelegramSettings>(builder.Configuration.GetSection("TelegramSettings"));
 
 // ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<ScraperState>();
@@ -362,11 +381,34 @@ app.MapPost("/api/locations", async (HttpContext ctx) =>
     JObject data;
     try { data = JObject.Parse(body); } catch { return Results.BadRequest(new { error = "JSON inválido" }); }
 
-    var name    = data["name"]?.ToString();
-    var url     = data["url"]?.ToString();
-    var rentUrl = data["rentUrl"]?.ToString();
+    var name                = data["name"]?.ToString();
+    var url                 = data["url"]?.ToString();
+    var rentUrl             = data["rentUrl"]?.ToString();
+    var scanIntervalMinutes = data["scanIntervalMinutes"]?.ToObject<int>() ?? 2;
+    var sortByRecent        = data.ContainsKey("sortByRecent") ? data["sortByRecent"]!.ToObject<bool>() : true;
+    var telegramChatId      = data["telegramChatId"]?.ToString();
 
-    var (ok, error, _) = DatabaseHelper.AddLocation(name ?? "", url ?? "", rentUrl);
+    var (ok, error, _) = DatabaseHelper.AddLocation(name ?? "", url ?? "", rentUrl,
+        scanIntervalMinutes, sortByRecent, telegramChatId);
+    if (!ok) return Results.BadRequest(new { error });
+    return Results.Ok(DatabaseHelper.GetAllLocations());
+}).RequireAuthorization("AdminOnly");
+
+app.MapPut("/api/locations/{id:int}", async (HttpContext ctx, int id) =>
+{
+    var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+    JObject data;
+    try { data = JObject.Parse(body); } catch { return Results.BadRequest(new { error = "JSON inválido" }); }
+
+    var name                = data["name"]?.ToString();
+    var url                 = data["url"]?.ToString();
+    var rentUrl             = data["rentUrl"]?.ToString();
+    var scanIntervalMinutes = data["scanIntervalMinutes"]?.ToObject<int>() ?? 2;
+    var sortByRecent        = data.ContainsKey("sortByRecent") ? data["sortByRecent"]!.ToObject<bool>() : true;
+    var telegramChatId      = data["telegramChatId"]?.ToString();
+
+    var (ok, error) = DatabaseHelper.UpdateLocation(id, name ?? "", url ?? "", rentUrl,
+        scanIntervalMinutes, sortByRecent, telegramChatId);
     if (!ok) return Results.BadRequest(new { error });
     return Results.Ok(DatabaseHelper.GetAllLocations());
 }).RequireAuthorization("AdminOnly");
@@ -379,7 +421,13 @@ app.MapDelete("/api/locations/{id:int}", (int id) =>
 }).RequireAuthorization("AdminOnly");
 
 // ── API: Settings ─────────────────────────────────────────────────────────────
-string AppSettingsPath() => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+string AppSettingsPath()
+{
+    var dp = Environment.GetEnvironmentVariable("DATA_PATH");
+    return !string.IsNullOrWhiteSpace(dp)
+        ? Path.Combine(dp, "appsettings.json")
+        : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+}
 
 app.MapGet("/api/settings", () =>
 {

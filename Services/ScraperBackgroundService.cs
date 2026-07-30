@@ -1,4 +1,4 @@
-﻿using InmoAlerts.Configuration;
+using InmoAlerts.Configuration;
 using InmoAlerts.Helpers;
 using InmoAlerts.Models;
 using Microsoft.Extensions.Options;
@@ -68,11 +68,13 @@ namespace InmoAlerts.Services
             _log.Log("⏹ Scraping detenido");
         }
 
+        // ── Orchestrator: one Task per zone, all running in parallel ─────────────
+
         private async Task RunScrapingLoopAsync(CancellationToken ct)
         {
             try
             {
-                _log.Log("▶ Iniciando ciclo de scraping...");
+                _log.Log("▶ Iniciando ciclos paralelos de scraping por zona...");
 
                 var locations = Helpers.DatabaseHelper.GetAllLocations();
 
@@ -84,99 +86,16 @@ namespace InmoAlerts.Services
                     return;
                 }
 
-                while (_state.IsRunning && !ct.IsCancellationRequested)
-                {
-                    _state.CycleCount++;
-                    _log.Log($"\n{"═",60}");
-                    _log.Log($"🔄 Ciclo #{_state.CycleCount}  —  {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
-                    _log.Log($"{"═",60}\n");
+                _log.Log($"📍 {locations.Count} zona(s) configurada(s). Lanzando ciclos paralelos...");
 
-                    // Reload locations each cycle so changes take effect
-                    locations = Helpers.DatabaseHelper.GetAllLocations();
-                    if (locations.Count == 0) break;
+                // Launch one loop per zone with a staggered offset so they don't
+                // all hit Idealista at exactly the same second.
+                const int offsetSeconds = 45;
+                var zoneTasks = locations
+                    .Select((loc, idx) => RunLocationLoopAsync(loc, idx * offsetSeconds, ct))
+                    .ToList();
 
-                    foreach (var location in locations)
-                    {
-                        if (!_state.IsRunning || ct.IsCancellationRequested) break;
-
-                        // ── Venta ──────────────────────────────────────────────
-                        if (!Settings.AlertVenta)
-                        {
-                            _log.Log($"⏭ Venta omitida (alertas de venta desactivadas): {location.Name}");
-                        }
-                        else
-                        try
-                        {
-                            _state.CurrentLocation = $"{location.Name} (Venta)";
-                            _log.Log($"🔍 Procesando venta: {location.Name}");
-                            var startTime = DateTime.Now;
-
-                            var properties = await ScraperHelper.ScrapeProperties(location, "Venta");
-
-                            var duration = (DateTime.Now - startTime).TotalMinutes;
-                            _log.Log($"⏱ Venta completado en {duration:F2} min  –  {properties.Count} propiedades");
-                            _state.PropertyCount = Helpers.DatabaseHelper.GetPropertyCount();
-                        }
-                        catch (OperationCanceledException) { _log.Log("⏹ Operación cancelada"); break; }
-                        catch (Exception ex) { _log.Log($"❌ Error venta {location.Name}: {ex.Message}\n"); }
-
-                        // ── Alquiler (RentUrl explícita o auto-derivada del patrón de Idealista) ──
-                        string? rentUrl = location.RentUrl;
-                        if (string.IsNullOrWhiteSpace(rentUrl))
-                            rentUrl = DeriveRentUrl(location.Url);
-
-                        if (!Settings.AlertAlquiler)
-                        {
-                            _log.Log($"⏭ Alquiler omitido (alertas de alquiler desactivadas): {location.Name}");
-                        }
-                        else if (!string.IsNullOrWhiteSpace(rentUrl) && _state.IsRunning && !ct.IsCancellationRequested)
-                        {
-                            try
-                            {
-                                _log.Log("⏳ Esperando 30 s antes de alquiler...\n");
-                                await Task.Delay(TimeSpan.FromSeconds(30), ct);
-
-                                var rentLocation = new Models.Location
-                                {
-                                    Name = location.Name,
-                                    Url = rentUrl
-                                };
-
-                                _state.CurrentLocation = $"{location.Name} (Alquiler)";
-                                _log.Log($"🔍 Procesando alquiler: {location.Name}  →  {rentUrl}");
-                                var startTime = DateTime.Now;
-
-                                var rentProperties = await ScraperHelper.ScrapeProperties(rentLocation, "Alquiler");
-
-                                var duration = (DateTime.Now - startTime).TotalMinutes;
-                                _log.Log($"⏱ Alquiler completado en {duration:F2} min  –  {rentProperties.Count} propiedades");
-                                _state.PropertyCount = Helpers.DatabaseHelper.GetPropertyCount();
-                            }
-                            catch (OperationCanceledException) { _log.Log("⏹ Operación cancelada"); break; }
-                            catch (Exception ex) { _log.Log($"❌ Error alquiler {location.Name}: {ex.Message}\n"); }
-                        }
-
-                        // Delay between locations
-                        if (location != locations.Last() && _state.IsRunning && !ct.IsCancellationRequested)
-                        {
-                            _log.Log("⏳ Esperando 30 s antes de la siguiente ubicación...\n");
-                            await Task.Delay(TimeSpan.FromSeconds(30), ct);
-                        }
-                    }
-
-                    await ScraperHelper.DisposeAsync();
-                    _state.LastRunTime = DateTime.Now;
-                    _state.CurrentLocation = "En espera";
-
-                    if (_state.IsRunning && !ct.IsCancellationRequested)
-                    {
-                        int minutes = Settings.MinutesBetweenCycles > 0 ? Settings.MinutesBetweenCycles : 5;
-                        _state.NextCycleTime = DateTime.Now.AddMinutes(minutes);
-                        _log.Log($"\n✓ Ciclo completado  –  Próximo ciclo en {minutes} minutos...\n");
-                        await Task.Delay(TimeSpan.FromMinutes(minutes), ct);
-                        _state.NextCycleTime = null;
-                    }
-                }
+                await Task.WhenAll(zoneTasks);
             }
             catch (OperationCanceledException)
             {
@@ -184,7 +103,7 @@ namespace InmoAlerts.Services
             }
             catch (Exception ex)
             {
-                _log.Log($"❌ Error crítico: {ex.Message}");
+                _log.Log($"❌ Error crítico en orquestador: {ex.Message}");
             }
             finally
             {
@@ -193,6 +112,108 @@ namespace InmoAlerts.Services
                 _state.CurrentLocation = "En espera";
                 _scrapingCts = null;
             }
+        }
+
+        // ── Per-zone loop ─────────────────────────────────────────────────────────
+
+        private async Task RunLocationLoopAsync(Location location, int initialOffsetSeconds, CancellationToken ct)
+        {
+            // Staggered start: wait offset so zones don't all fire at T+0
+            if (initialOffsetSeconds > 0 && !ct.IsCancellationRequested)
+            {
+                _log.Log($"⏳ Zona [{location.Name}] inicia en {initialOffsetSeconds}s...");
+                await Task.Delay(TimeSpan.FromSeconds(initialOffsetSeconds), ct).ContinueWith(_ => { });
+            }
+
+            int cycleCount = 0;
+
+            while (_state.IsRunning && !ct.IsCancellationRequested)
+            {
+                // Reload fresh location data each cycle (interval or Telegram chatId may have changed)
+                var freshLocations = Helpers.DatabaseHelper.GetAllLocations();
+                var fresh = freshLocations.FirstOrDefault(l => l.Id == location.Id);
+                if (fresh == null) break; // zone was deleted — stop this loop
+                location = fresh;
+
+                cycleCount++;
+                int intervalMin = location.ScanIntervalMinutes > 0 ? location.ScanIntervalMinutes : 2;
+
+                _log.Log($"\n[{location.Name}] 🔄 Ciclo #{cycleCount}  —  {DateTime.Now:HH:mm:ss}");
+
+                // ── Venta ──────────────────────────────────────────────────────────
+                if (!Settings.AlertVenta)
+                {
+                    _log.Log($"[{location.Name}] ⏭ Venta omitida (desactivada globalmente)");
+                }
+                else
+                {
+                    try
+                    {
+                        _state.CurrentLocation = $"{location.Name} (Venta)";
+                        _log.Log($"[{location.Name}] 🔍 Venta...");
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                        var props = await ScraperHelper.ScrapeProperties(location, "Venta");
+
+                        sw.Stop();
+                        _log.Log($"[{location.Name}] ⏱ Venta: {sw.Elapsed.TotalSeconds:F1}s — {props.Count} prop(s)");
+                        _state.PropertyCount = Helpers.DatabaseHelper.GetPropertyCount();
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex) { _log.Log($"[{location.Name}] ❌ Error venta: {ex.Message}"); }
+                }
+
+                if (!_state.IsRunning || ct.IsCancellationRequested) break;
+
+                // ── Alquiler ──────────────────────────────────────────────────────
+                string? rentUrl = location.RentUrl;
+                if (string.IsNullOrWhiteSpace(rentUrl))
+                    rentUrl = DeriveRentUrl(location.Url);
+
+                if (!Settings.AlertAlquiler)
+                {
+                    _log.Log($"[{location.Name}] ⏭ Alquiler omitido (desactivado globalmente)");
+                }
+                else if (!string.IsNullOrWhiteSpace(rentUrl))
+                {
+                    try
+                    {
+                        // Small delay between venta and alquiler for the same zone
+                        await Task.Delay(TimeSpan.FromSeconds(20), ct);
+
+                        var rentLocation = new Location
+                        {
+                            Id                  = location.Id,
+                            Name                = location.Name,
+                            Url                 = rentUrl,
+                            SortByRecent        = location.SortByRecent,
+                            ScanIntervalMinutes = location.ScanIntervalMinutes,
+                            TelegramChatId      = location.TelegramChatId
+                        };
+
+                        _state.CurrentLocation = $"{location.Name} (Alquiler)";
+                        _log.Log($"[{location.Name}] 🔍 Alquiler...");
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                        var rentProps = await ScraperHelper.ScrapeProperties(rentLocation, "Alquiler");
+
+                        sw.Stop();
+                        _log.Log($"[{location.Name}] ⏱ Alquiler: {sw.Elapsed.TotalSeconds:F1}s — {rentProps.Count} prop(s)");
+                        _state.PropertyCount = Helpers.DatabaseHelper.GetPropertyCount();
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex) { _log.Log($"[{location.Name}] ❌ Error alquiler: {ex.Message}"); }
+                }
+
+                // ── Wait until next cycle ─────────────────────────────────────────
+                if (_state.IsRunning && !ct.IsCancellationRequested)
+                {
+                    _log.Log($"[{location.Name}] ✓ Ciclo #{cycleCount} completado — próximo en {intervalMin} min");
+                    await Task.Delay(TimeSpan.FromMinutes(intervalMin), ct).ContinueWith(_ => { });
+                }
+            }
+
+            _log.Log($"[{location.Name}] ⏹ Loop de zona detenido.");
         }
 
         private void OnNewPropertyFound(Property property)
@@ -221,7 +242,6 @@ namespace InmoAlerts.Services
         /// </summary>
         private static string? DeriveRentUrl(string saleUrl)
         {
-            // Standard Idealista sale → rent URL mapping
             var replacements = new[]
             {
                 ("venta-viviendas",     "alquiler-viviendas"),
@@ -239,7 +259,7 @@ namespace InmoAlerts.Services
                     return saleUrl.Replace(saleSegment, rentSegment, StringComparison.OrdinalIgnoreCase);
             }
 
-            return null; // URL pattern not recognised — skip alquiler for this location
+            return null;
         }
     }
 }

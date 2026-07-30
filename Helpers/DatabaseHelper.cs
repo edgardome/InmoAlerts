@@ -1,18 +1,20 @@
-﻿using InmoAlerts.Models;
+using InmoAlerts.Models;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using System.Security.Cryptography;
+using System.Diagnostics;
 
 namespace InmoAlerts.Helpers
 {
     public static class DatabaseHelper
     {
-        private static readonly string ProjectRoot =
-            Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory)?.Parent?.Parent?.Parent?.FullName
-            ?? throw new InvalidOperationException("No se pudo encontrar la raíz del proyecto");
+        private static readonly string DataDirectory = Environment.GetEnvironmentVariable("DATA_PATH") ?? 
+            (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development" || Debugger.IsAttached
+                ? (Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory)?.Parent?.Parent?.Parent?.FullName ?? AppDomain.CurrentDomain.BaseDirectory)
+                : AppDomain.CurrentDomain.BaseDirectory);
 
         private static readonly string ConnectionString =
-            $"Data Source={Path.Combine(ProjectRoot, "properties.db")}";
+            $"Data Source={Path.Combine(DataDirectory, "properties.db")}";
 
         // ── Init ────────────────────────────────────────────────────────────────
 
@@ -52,17 +54,21 @@ namespace InmoAlerts.Helpers
             // Locations table
             ExecuteNonQuery(connection, @"
                 CREATE TABLE IF NOT EXISTS Locations (
-                    Id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                    Name      TEXT NOT NULL,
-                    Url       TEXT NOT NULL,
-                    RentUrl   TEXT,
-                    SortOrder INTEGER NOT NULL DEFAULT 0
+                    Id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Name                TEXT NOT NULL,
+                    Url                 TEXT NOT NULL,
+                    RentUrl             TEXT,
+                    SortOrder           INTEGER NOT NULL DEFAULT 0,
+                    ScanIntervalMinutes INTEGER NOT NULL DEFAULT 2,
+                    SortByRecent        INTEGER NOT NULL DEFAULT 1,
+                    TelegramChatId      TEXT
                 );");
 
             MigrateProperties(connection);
             MigrateUsers(connection);
             SeedUsers(connection);
             MigrateLocationsFromJson(connection);
+            MigrateLocations(connection);
 
             Console.WriteLine("✓ Base de datos inicializada correctamente.");
         }
@@ -103,6 +109,33 @@ namespace InmoAlerts.Helpers
             catch (Exception ex)
             {
                 Console.WriteLine($"⚠️ Error durante la migración de propiedades: {ex.Message}");
+            }
+        }
+
+        // ── Locations migration (new columns) ────────────────────────────────────
+
+        private static void MigrateLocations(SqliteConnection connection)
+        {
+            try
+            {
+                using var cmd    = new SqliteCommand("PRAGMA table_info(Locations)", connection);
+                using var reader = cmd.ExecuteReader();
+                bool hasScanInterval = false, hasSortByRecent = false, hasTelegramChatId = false;
+                while (reader.Read())
+                {
+                    var col = reader.GetString(1);
+                    if (col == "ScanIntervalMinutes") hasScanInterval   = true;
+                    if (col == "SortByRecent")        hasSortByRecent   = true;
+                    if (col == "TelegramChatId")      hasTelegramChatId = true;
+                }
+                reader.Close();
+                if (!hasScanInterval)   ExecuteNonQuery(connection, "ALTER TABLE Locations ADD COLUMN ScanIntervalMinutes INTEGER NOT NULL DEFAULT 2");
+                if (!hasSortByRecent)   ExecuteNonQuery(connection, "ALTER TABLE Locations ADD COLUMN SortByRecent INTEGER NOT NULL DEFAULT 1");
+                if (!hasTelegramChatId) ExecuteNonQuery(connection, "ALTER TABLE Locations ADD COLUMN TelegramChatId TEXT");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Error migrando tabla Locations: {ex.Message}");
             }
         }
 
@@ -505,23 +538,49 @@ namespace InmoAlerts.Helpers
             connection.Open();
 
             using var cmd = new SqliteCommand(
-                "SELECT Id, Name, Url, RentUrl FROM Locations ORDER BY SortOrder, Id",
+                "SELECT Id, Name, Url, RentUrl, ScanIntervalMinutes, SortByRecent, TelegramChatId FROM Locations ORDER BY SortOrder, Id",
                 connection);
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
                 locs.Add(new Location
                 {
-                    Id      = reader.GetInt32(0),
-                    Name    = reader.GetString(1),
-                    Url     = reader.GetString(2),
-                    RentUrl = reader.IsDBNull(3) ? null : reader.GetString(3)
+                    Id                  = reader.GetInt32(0),
+                    Name                = reader.GetString(1),
+                    Url                 = reader.GetString(2),
+                    RentUrl             = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    ScanIntervalMinutes = reader.IsDBNull(4) ? 2    : reader.GetInt32(4),
+                    SortByRecent        = reader.IsDBNull(5) || reader.GetInt32(5) != 0,
+                    TelegramChatId      = reader.IsDBNull(6) ? null : reader.GetString(6)
                 });
             }
             return locs;
         }
 
-        public static (bool ok, string error, Location? created) AddLocation(string name, string url, string? rentUrl)
+        /// <summary>
+        /// Returns distinct Telegram chat IDs configured for users whose zone matches this property.
+        /// </summary>
+        public static List<string> GetTelegramChatIdsForProperty(string province, string location, string listingType)
+        {
+            using var connection = new SqliteConnection(ConnectionString);
+            connection.Open();
+            using var cmd = new SqliteCommand(
+                "SELECT TelegramChatId FROM Locations WHERE TelegramChatId IS NOT NULL AND TelegramChatId != ''",
+                connection);
+            using var reader = cmd.ExecuteReader();
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (reader.Read())
+            {
+                var chatId = reader.IsDBNull(0) ? null : reader.GetString(0);
+                if (!string.IsNullOrWhiteSpace(chatId))
+                    result.Add(chatId.Trim());
+            }
+            return result.ToList();
+        }
+
+        public static (bool ok, string error, Location? created) AddLocation(
+            string name, string url, string? rentUrl,
+            int scanIntervalMinutes = 2, bool sortByRecent = true, string? telegramChatId = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return (false, "El nombre es obligatorio", null);
             if (string.IsNullOrWhiteSpace(url))  return (false, "La URL es obligatoria", null);
@@ -533,15 +592,47 @@ namespace InmoAlerts.Helpers
             var sort = Convert.ToInt32(maxCmd.ExecuteScalar());
 
             using var cmd = new SqliteCommand(
-                "INSERT INTO Locations (Name, Url, RentUrl, SortOrder) VALUES (@n, @u, @r, @s); SELECT last_insert_rowid();",
+                "INSERT INTO Locations (Name, Url, RentUrl, SortOrder, ScanIntervalMinutes, SortByRecent, TelegramChatId) " +
+                "VALUES (@n, @u, @r, @s, @si, @sr, @tc); SELECT last_insert_rowid();",
                 connection);
-            cmd.Parameters.AddWithValue("@n", name.Trim());
-            cmd.Parameters.AddWithValue("@u", url.Trim());
-            cmd.Parameters.AddWithValue("@r", string.IsNullOrWhiteSpace(rentUrl) ? DBNull.Value : (object)rentUrl.Trim());
-            cmd.Parameters.AddWithValue("@s", sort);
+            cmd.Parameters.AddWithValue("@n",  name.Trim());
+            cmd.Parameters.AddWithValue("@u",  url.Trim());
+            cmd.Parameters.AddWithValue("@r",  string.IsNullOrWhiteSpace(rentUrl) ? DBNull.Value : (object)rentUrl.Trim());
+            cmd.Parameters.AddWithValue("@s",  sort);
+            cmd.Parameters.AddWithValue("@si", scanIntervalMinutes > 0 ? scanIntervalMinutes : 2);
+            cmd.Parameters.AddWithValue("@sr", sortByRecent ? 1 : 0);
+            cmd.Parameters.AddWithValue("@tc", string.IsNullOrWhiteSpace(telegramChatId) ? DBNull.Value : (object)telegramChatId.Trim());
             var newId = Convert.ToInt32(cmd.ExecuteScalar());
 
-            return (true, string.Empty, new Location { Id = newId, Name = name, Url = url, RentUrl = rentUrl });
+            return (true, string.Empty, new Location
+            {
+                Id = newId, Name = name, Url = url, RentUrl = rentUrl,
+                ScanIntervalMinutes = scanIntervalMinutes, SortByRecent = sortByRecent,
+                TelegramChatId = telegramChatId
+            });
+        }
+
+        public static (bool ok, string error) UpdateLocation(
+            int id, string name, string url, string? rentUrl,
+            int scanIntervalMinutes = 2, bool sortByRecent = true, string? telegramChatId = null)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return (false, "El nombre es obligatorio");
+            if (string.IsNullOrWhiteSpace(url))  return (false, "La URL es obligatoria");
+
+            using var connection = new SqliteConnection(ConnectionString);
+            connection.Open();
+            using var cmd = new SqliteCommand(
+                "UPDATE Locations SET Name=@n, Url=@u, RentUrl=@r, ScanIntervalMinutes=@si, SortByRecent=@sr, TelegramChatId=@tc WHERE Id=@id",
+                connection);
+            cmd.Parameters.AddWithValue("@n",  name.Trim());
+            cmd.Parameters.AddWithValue("@u",  url.Trim());
+            cmd.Parameters.AddWithValue("@r",  string.IsNullOrWhiteSpace(rentUrl) ? DBNull.Value : (object)rentUrl.Trim());
+            cmd.Parameters.AddWithValue("@si", scanIntervalMinutes > 0 ? scanIntervalMinutes : 2);
+            cmd.Parameters.AddWithValue("@sr", sortByRecent ? 1 : 0);
+            cmd.Parameters.AddWithValue("@tc", string.IsNullOrWhiteSpace(telegramChatId) ? DBNull.Value : (object)telegramChatId.Trim());
+            cmd.Parameters.AddWithValue("@id", id);
+            var rows = cmd.ExecuteNonQuery();
+            return rows > 0 ? (true, string.Empty) : (false, "Ubicación no encontrada");
         }
 
         public static (bool ok, string error) DeleteLocation(int id)

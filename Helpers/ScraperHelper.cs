@@ -77,14 +77,9 @@ namespace InmoAlerts.Helpers
             {
                 _playwright = await Playwright.CreateAsync();
                 
-                // For production (e.g. Railway), headless must be true.
-                // Using false will crash without a display server.
-                var headless = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development" || 
-                               Environment.GetEnvironmentVariable("HEADLESS") != "false";
-
                 _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                 {
-                    Headless = headless,
+                    Headless = false, // Obligatorio false para engañar a DataDome. En Railway usará Xvfb.
                     Args = new[] 
                     { 
                         "--disable-blink-features=AutomationControlled",
@@ -228,10 +223,12 @@ namespace InmoAlerts.Helpers
 
                     var html = await page.ContentAsync();
 
-                    // Verificar si hay captcha
-                    if (html.Contains("se ha bloqueado", StringComparison.OrdinalIgnoreCase))
+                    // Verificar si hay captcha o bloqueo de DataDome
+                    if (html.Contains("se ha bloqueado", StringComparison.OrdinalIgnoreCase) ||
+                        html.Contains("datadome", StringComparison.OrdinalIgnoreCase) ||
+                        html.Contains("robot", StringComparison.OrdinalIgnoreCase))
                     {
-                        throw new Exception("Captcha detectado");
+                        throw new Exception("Anti-bot (DataDome) detectado en esta petición.");
                     }
 
                     Console.WriteLine("Página obtenida correctamente");

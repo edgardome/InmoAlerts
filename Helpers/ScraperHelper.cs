@@ -77,9 +77,12 @@ namespace InmoAlerts.Helpers
             {
                 _playwright = await Playwright.CreateAsync();
                 
+                var headless = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development" && 
+                               Environment.GetEnvironmentVariable("HEADLESS") != "false";
+
                 _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                 {
-                    Headless = false, // Obligatorio false para engañar a DataDome. En Railway usará Xvfb.
+                    Headless = headless,
                     Args = new[] 
                     { 
                         "--disable-blink-features=AutomationControlled",
@@ -98,6 +101,11 @@ namespace InmoAlerts.Helpers
                     ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
                     JavaScriptEnabled = true
                 });
+
+                // Stealth plugin simulation para evadir DataDome en modo Headless
+                await _context.AddInitScriptAsync(@"
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                ");
             }
         }
 

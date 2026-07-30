@@ -102,9 +102,18 @@ namespace InmoAlerts.Helpers
                     JavaScriptEnabled = true
                 });
 
-                // Stealth plugin simulation para evadir DataDome en modo Headless
+                // Stealth plugin avanzado para evadir DataDome
                 await _context.AddInitScriptAsync(@"
                     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    window.chrome = { runtime: {} };
+                    Object.defineProperty(navigator, 'languages', { get: () => ['es-ES', 'es', 'en-US', 'en'] });
+                    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+                    const originalQuery = window.navigator.permissions.query;
+                    window.navigator.permissions.query = (parameters) => (
+                        parameters.name === 'notifications' ?
+                            Promise.resolve({ state: Notification.permission }) :
+                            originalQuery(parameters)
+                    );
                 ");
             }
         }

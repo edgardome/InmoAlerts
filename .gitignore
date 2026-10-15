@@ -1,5 +1,39 @@
+## .NET Core / C# build output
 bin/
 obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+bld/
+
+## Visual Studio & IDEs
 .vs/
-*.exe
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+.idea/
+.vscode/
+
+## Database & Local Data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+## Sensitive Configuration (Keep local overrides private)
+appsettings.Development.json
+appsettings.Local.json
+
+## Logs & Temp files
+*.log
+_temp*
+refactor.js
 copilot.exe.old
+
+## OS files
+.DS_Store
+Thumbs.db
